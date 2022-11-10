@@ -189,10 +189,10 @@ let expand_modtype_path env path =
      | exception Not_found -> None
      | x -> Some x
 
-let expand_module_alias ~strengthen env path =
+let expand_module_path ~strengthen ~aliasable env path =
   match
-    if strengthen then Env.find_strengthened_module ~aliasable:true path env
-    else (Env.find_module path env).md_type
+    if strengthen then Env.find_strengthened_module ~aliasable path env
+    else (Env.find_module path env).md_type, None
   with
   | x -> Ok x
   | exception Not_found -> Error (Error.Unbound_module_path path)
@@ -398,8 +398,8 @@ let retrieve_functor_params env mty =
         | None -> List.rev before, res
         end
     | Mty_alias p as res ->
-        begin match expand_module_alias ~strengthen:false env p with
-        | Ok mty ->  retrieve_functor_params before env mty
+        begin match expand_module_path ~strengthen:false ~aliasable:true env p with
+        | Ok (mty, _) ->  retrieve_functor_params before env mty
         | Error _ -> List.rev before, res
         end
     | Mty_functor (p, res) -> retrieve_functor_params (p :: before) env res
@@ -490,9 +490,9 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       | exception Env.Error (Env.Missing_module (_, _, path)) ->
           Error Error.(Mt_core(Unbound_module_path path))
       | p1 ->
-          begin match expand_module_alias ~strengthen:false env p1 with
+          begin match expand_module_path ~strengthen:false ~aliasable:true env p1 with
           | Error e -> Error (Error.Mt_core e)
-          | Ok mty1 ->
+          | Ok (mty1, _) ->
               match strengthened_modtypes ~in_eq ~loc ~aliasable:true env ~mark
                       subst mty1 p1 mty2 orig_shape
               with
@@ -1227,8 +1227,8 @@ let strengthened_module_decl ~loc ~aliasable env ~mark md1 path1 md2 =
   | Error mdiff ->
       raise (Error(env,Error.(In_Module_type mdiff)))
 
-let expand_module_alias ~strengthen env path =
-  match expand_module_alias ~strengthen env path with
+let expand_module_path ~strengthen ~aliasable env path =
+  match expand_module_path ~strengthen ~aliasable env path with
   | Ok x -> x
   | Result.Error _ ->
       raise (Error(env,In_Expansion(Error.Unbound_module_path path)))

@@ -2080,6 +2080,7 @@ let check_recmodule_inclusion env bindings =
             { mod_desc = Tmod_constraint(modl, mty_decl.mty_type,
                 Tmodtype_explicit mty_decl, coercion);
               mod_type = mty_decl.mty_type;
+              mod_name = None;
               mod_env = env;
               mod_loc = modl.mod_loc;
               mod_attributes = [];
@@ -2165,6 +2166,7 @@ let wrap_constraint env mark arg mty explicit =
       raise(Error(arg.mod_loc, env, Not_included msg)) in
   { mod_desc = Tmod_constraint(arg, mty, explicit, coercion);
     mod_type = mty;
+    mod_name = None;
     mod_env = env;
     mod_attributes = [];
     mod_loc = arg.mod_loc }
@@ -2180,6 +2182,7 @@ let wrap_constraint_with_shape env mark arg mty
       raise(Error(arg.mod_loc, env, Not_included msg)) in
   { mod_desc = Tmod_constraint(arg, mty, explicit, coercion);
     mod_type = mty;
+    mod_name = None;
     mod_env = env;
     mod_attributes = [];
     mod_loc = arg.mod_loc }, shape
@@ -2217,6 +2220,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
       in
       let md = { mod_desc = Tmod_ident (path, lid);
                  mod_type = Mty_alias path;
+                 mod_name = None;
                  mod_env = env;
                  mod_attributes = smod.pmod_attributes;
                  mod_loc = smod.pmod_loc } in
@@ -2228,24 +2232,22 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         if alias && aliasable then
           (Env.add_required_global (Path.head path); md)
         else begin
-          let mty =
-            if sttn then
-              Env.find_strengthened_module ~aliasable path env
-            else
-              (Env.find_module path env).md_type
+          let mty, mname = Includemod.expand_module_path
+                           ~strengthen:sttn ~aliasable env path
           in
           match mty with
           | Mty_alias p1 when not alias ->
               let p1 = Env.normalize_module_path (Some smod.pmod_loc) env p1 in
-              let mty = Includemod.expand_module_alias
-                  ~strengthen:sttn env p1 in
+              let mty, mname = Includemod.expand_module_path
+                               ~strengthen:sttn ~aliasable:true env p1 in
               { md with
                 mod_desc =
                   Tmod_constraint (md, mty, Tmodtype_implicit,
                                    Tcoerce_alias (env, path, Tcoerce_none));
-                mod_type = mty }
+                mod_type = mty;
+                mod_name = mname }
           | mty ->
-              { md with mod_type = mty }
+              { md with mod_type = mty; mod_name = mname }
         end
       in
       md, shape
@@ -2255,6 +2257,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
       let md =
         { mod_desc = Tmod_structure str;
           mod_type = Mty_signature sg;
+          mod_name = None;
           mod_env = env;
           mod_attributes = smod.pmod_attributes;
           mod_loc = smod.pmod_loc }
@@ -2297,6 +2300,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
       let body, body_shape = type_module true funct_body None newenv sbody in
       { mod_desc = Tmod_functor(t_arg, body);
         mod_type = Mty_functor(ty_arg, body.mod_type);
+        mod_name = None;
         mod_env = env;
         mod_attributes = smod.pmod_attributes;
         mod_loc = smod.pmod_loc },
@@ -2344,6 +2348,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         raise (Error (smod.pmod_loc, env, Not_allowed_in_functor_body));
       { mod_desc = Tmod_unpack(exp, mty);
         mod_type = mty;
+        mod_name = None;
         mod_env = env;
         mod_attributes = smod.pmod_attributes;
         mod_loc = smod.pmod_loc },
@@ -2389,21 +2394,29 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
         raise (Error (apply_loc, env, Not_allowed_in_functor_body));
       { mod_desc = Tmod_apply(funct, app_view.arg, Tcoerce_none);
         mod_type = mty_res;
+        mod_name = None;
         mod_env = env;
         mod_attributes = app_view.attributes;
         mod_loc = funct.mod_loc },
       Shape.app funct_shape ~arg:app_view.shape
   | Mty_functor (Named (param, mty_param), mty_res) as mty_functor ->
       let coercion =
-        try
-          Includemod.modtypes
-            ~loc:app_view.arg.mod_loc ~mark:Mark_both env
-            app_view.arg.mod_type mty_param
-        with Includemod.Error _ ->
-          let args = List.map simplify_app_summary args in
-          let mty_f = md_f.mod_type in
-          let lid_app = None in
-          raise(Includemod.Apply_error {loc=apply_loc;env;lid_app;mty_f;args})
+        match mty_param, app_view.arg.mod_name with
+        | Mty_ident param_path, Some arg_path when
+            Path.same
+              (Env.normalize_modtype_path env param_path)
+              (Env.normalize_modtype_path env arg_path) ->
+            Tcoerce_none
+        | _ ->
+          try
+            Includemod.modtypes
+              ~loc:app_view.arg.mod_loc ~mark:Mark_both env
+              app_view.arg.mod_type mty_param
+          with Includemod.Error _ ->
+            let args = List.map simplify_app_summary args in
+            let mty_f = md_f.mod_type in
+            let lid_app = None in
+            raise(Includemod.Apply_error {loc=apply_loc;env;lid_app;mty_f;args})
       in
       let mty_appl =
         match app_view.arg_path with
@@ -2451,6 +2464,7 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
         "the signature of this functor application" mty_appl;
       { mod_desc = Tmod_apply(funct, app_view.arg, coercion);
         mod_type = mty_appl;
+        mod_name = None;
         mod_env = env;
         mod_attributes = app_view.attributes;
         mod_loc = app_view.loc },
@@ -2478,6 +2492,7 @@ and type_open_decl_aux ?used_slot ?toplevel funct_body names env od =
     in
     let md = { mod_desc = Tmod_ident (path, lid);
                mod_type = Mty_alias path;
+               mod_name = None;
                mod_env = env;
                mod_attributes = od.popen_expr.pmod_attributes;
                mod_loc = od.popen_expr.pmod_loc }
@@ -2974,6 +2989,7 @@ let type_module_type_of env smod =
         let path, md = Env.lookup_module ~loc:smod.pmod_loc lid.txt env in
           { mod_desc = Tmod_ident (path, lid);
             mod_type = md.md_type;
+            mod_name = None;
             mod_env = env;
             mod_attributes = smod.pmod_attributes;
             mod_loc = smod.pmod_loc }

@@ -293,6 +293,7 @@ and module_expr =
   { mod_desc: module_expr_desc;
     mod_loc: Location.t;
     mod_type: Types.module_type;
+    mod_name: Path.t option;
     mod_env: Env.t;
     mod_attributes: attribute list;
    }
