@@ -134,12 +134,9 @@ let strengthen_decl ~aliasable env md p =
              (Subst.Lazy.of_module_decl md) p in
   Subst.Lazy.force_module_decl md
 
-let rec sig_make_manifest sg =
-  match sg with
-    [] -> []
-  | (Sig_value _ | Sig_class _ | Sig_class_type _) as t :: rem ->
-    t :: sig_make_manifest rem
-  | Sig_type (id,decl,rs,vis) :: rem ->
+let sig_make_manifest = List.map (function
+  | (Sig_value _ | Sig_class _ | Sig_class_type _ | Sig_typext _) as t -> t
+  | Sig_type (id,decl,rs,vis) ->
     let newdecl =
       match decl.type_manifest, decl.type_private, decl.type_kind with
         Some _, Public, _ -> decl
@@ -153,24 +150,22 @@ let rec sig_make_manifest sg =
         else
           { decl with type_manifest = manif }
     in
-    Sig_type(Ident.rename id, newdecl, rs, vis) :: sig_make_manifest rem
-  | Sig_typext _ as sigelt :: rem ->
-    sigelt :: sig_make_manifest rem
-  | Sig_module(id, pres, md, rs, vis) :: rem ->
+    Sig_type(Ident.rename id, newdecl, rs, vis)
+  | Sig_module(id, pres, md, rs, vis) ->
     let md =
       match md.md_type with
       | Mty_alias _ -> md
       | _ -> {md with md_type = Mty_alias (Pident id)}
     in
-    Sig_module(Ident.rename id, pres, md, rs, vis) :: sig_make_manifest rem
-  | Sig_modtype(id, decl, vis) :: rem ->
+    Sig_module(Ident.rename id, pres, md, rs, vis)
+  | Sig_modtype(id, decl, vis) ->
     let newdecl =
       {decl with mtd_type =
                    match decl.mtd_type with
                    | None -> Some (Mty_ident (Pident id))
                    | Some _ -> decl.mtd_type }
     in
-    Sig_modtype(Ident.rename id, newdecl, vis) :: sig_make_manifest rem
+    Sig_modtype(Ident.rename id, newdecl, vis))
 
 let rec make_aliases_absent pres mty =
   match mty with
