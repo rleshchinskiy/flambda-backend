@@ -171,7 +171,7 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
             raise(Error(loc, env, Cannot_eliminate_dependency
                                     (Functor_included, mty_func)))
       in
-      (sg, incl_kind)
+      (incl_kind, sg)
   | Mty_functor (Unit,_) as mty ->
       raise(Error(loc, env, Signature_parameter_expected mty))
   | Mty_alias path -> raise(Error(loc, env, Cannot_scrape_alias path))
@@ -1681,10 +1681,7 @@ and transl_signature env (sg : Parsetree.signature) =
         let scope = Ctype.create_scope () in
         let incl_kind, sg =
           if has_include_functor env sloc sincl.pincl_attributes then
-            let (sg, incl_kind) =
               extract_sig_functor_open false env smty.pmty_loc mty sig_acc
-            in
-            incl_kind, sg
           else
             Tincl_structure, extract_sig env smty.pmty_loc mty
         in
@@ -2870,11 +2867,8 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
         in
         let incl_kind, sg =
           if has_include_functor env sloc sincl.pincl_attributes then
-            let (sg, incl_kind) =
               extract_sig_functor_open funct_body env smodl.pmod_loc
                 modl.mod_type sig_acc
-            in
-            incl_kind, sg
           else
             Tincl_structure, extract_sig_open env smodl.pmod_loc modl.mod_type
         in
