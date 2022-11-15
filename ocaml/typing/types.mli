@@ -597,6 +597,20 @@ type visibility =
   | Exported
   | Hidden
 
+type module_presence =
+  | Mp_present
+  | Mp_absent
+
+type rec_status =
+    Trec_not                   (* first in a nonrecursive group *)
+  | Trec_first                 (* first in a recursive group *)
+  | Trec_next                  (* not first in a recursive/nonrecursive group *)
+
+type ext_status =
+    Text_first                     (* first constructor in an extension *)
+  | Text_next                      (* not first constructor in an extension *)
+  | Text_exception
+
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
@@ -606,10 +620,6 @@ type module_type =
 and functor_parameter =
   | Unit
   | Named of Ident.t option * module_type
-
-and module_presence =
-  | Mp_present
-  | Mp_absent
 
 and signature = signature_item list
 
@@ -638,16 +648,6 @@ and modtype_declaration =
     mtd_loc: Location.t;
     mtd_uid: Uid.t;
   }
-
-and rec_status =
-    Trec_not                   (* first in a nonrecursive group *)
-  | Trec_first                 (* first in a recursive group *)
-  | Trec_next                  (* not first in a recursive/nonrecursive group *)
-
-and ext_status =
-    Text_first                     (* first constructor in an extension *)
-  | Text_next                      (* not first constructor in an extension *)
-  | Text_exception
 
 val item_visibility : signature_item -> visibility
 
