@@ -444,23 +444,23 @@ type scoping =
 
 module Lazy_types = struct
 
-  type module_decl =
+  type module_declaration =
     {
-      mdl_type: modtype;
+      mdl_type: module_type;
       mdl_attributes: Parsetree.attributes;
       mdl_loc: Location.t;
       mdl_uid: Uid.t;
     }
 
-  and modtype =
+  and module_type =
     | MtyL_ident of Path.t
     | MtyL_signature of signature
-    | MtyL_functor of functor_parameter * modtype
+    | MtyL_functor of functor_parameter * module_type
     | MtyL_alias of Path.t
 
   and modtype_declaration =
     {
-      mtdl_type: modtype option;
+      mtdl_type: module_type option;
       mtdl_attributes: Parsetree.attributes;
       mtdl_loc: Location.t;
       mtdl_uid: Uid.t;
@@ -478,7 +478,7 @@ module Lazy_types = struct
     | SigL_type of Ident.t * type_declaration * rec_status * visibility
     | SigL_typext of Ident.t * extension_constructor * ext_status * visibility
     | SigL_module of
-        Ident.t * module_presence * module_decl * rec_status * visibility
+        Ident.t * module_presence * module_declaration * rec_status * visibility
     | SigL_modtype of Ident.t * modtype_declaration * visibility
     | SigL_class of Ident.t * class_declaration * rec_status * visibility
     | SigL_class_type of Ident.t * class_type_declaration *
@@ -486,7 +486,7 @@ module Lazy_types = struct
 
   and functor_parameter =
     | Unit
-    | Named of Ident.t option * modtype
+    | Named of Ident.t option * module_type
 
 end
 open Lazy_types

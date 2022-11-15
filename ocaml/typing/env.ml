@@ -564,7 +564,7 @@ and components_maker = {
   cm_prefixing_subst: Subst.t;
   cm_path: Path.t;
   cm_addr: address_lazy;
-  cm_mty: Subst.Lazy.modtype;
+  cm_mty: Subst.Lazy.module_type;
   cm_shape: Shape.t;
 }
 
@@ -625,7 +625,7 @@ and type_data =
     tda_shape : Shape.t; }
 
 and module_data =
-  { mda_declaration : Subst.Lazy.module_decl;
+  { mda_declaration : Subst.Lazy.module_declaration;
     mda_components : module_components;
     mda_address : address_lazy;
     mda_shape: Shape.t; }
@@ -801,8 +801,8 @@ let check_functor_application =
 let strengthen =
   (* to be filled with Mtype.strengthen *)
   ref ((fun ~aliasable:_ _env _mty _path -> assert false) :
-         aliasable:bool -> t -> Subst.Lazy.modtype ->
-         Path.t -> Subst.Lazy.modtype)
+         aliasable:bool -> t -> Subst.Lazy.module_type ->
+         Path.t -> Subst.Lazy.module_type)
 
 let md md_type =
   {md_type; md_attributes=[]; md_loc=Location.none
