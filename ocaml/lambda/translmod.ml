@@ -278,7 +278,7 @@ let init_shape id modl =
         raise (Initialization_failure
                 (Unsafe {reason=Unsafe_module_binding;loc;subid}))
     | Mty_signature sg ->
-        Const_block(0, [Const_block(0, init_shape_struct env sg)])
+        Const_block(0, [Const_block(0, init_shape_struct env (Signature.unpack sg))])
     | Mty_functor _ ->
         (* can we do better? *)
         raise (Initialization_failure
@@ -773,7 +773,7 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
             in
             Lletrec(class_bindings, body), size
       | Tstr_include incl ->
-          let ids = bound_value_identifiers incl.incl_type in
+          let ids = bound_value_identifiers (Signature.unpack incl.incl_type) in
           let modl = incl.incl_mod in
           let mid = Ident.create_local "include" in
           let rec rebind_idents pos newfields = function
@@ -967,7 +967,7 @@ let rec defined_idents = function
       List.map (fun (ci, _) -> ci.ci_id_class) cl_list @ defined_idents rem
     | Tstr_class_type _ -> defined_idents rem
     | Tstr_include incl ->
-      bound_value_identifiers incl.incl_type @ defined_idents rem
+      bound_value_identifiers (Signature.unpack incl.incl_type) @ defined_idents rem
     | Tstr_attribute _ -> defined_idents rem
 
 (* second level idents (module M = struct ... let id = ... end),
@@ -1041,11 +1041,11 @@ and all_idents = function
                               ( Tmod_constraint ({mod_desc = Tmod_structure str},
                                               _, _, _)
                               | Tmod_structure str ) }} ->
-        bound_value_identifiers incl_type
+        bound_value_identifiers (Signature.unpack incl_type)
         @ all_idents str.str_items
         @ all_idents rem
     | Tstr_include incl ->
-      bound_value_identifiers incl.incl_type @ all_idents rem
+      bound_value_identifiers (Signature.unpack incl.incl_type) @ all_idents rem
 
     | Tstr_module
         { mb_id = Some id;
@@ -1289,7 +1289,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
             in
             let subst = !transl_store_subst in
             let field = field_of_str (of_location ~scopes loc) str in
-            let ids0 = bound_value_identifiers incl_type in
+            let ids0 = bound_value_identifiers (Signature.unpack incl_type) in
             let rec loop ids args =
               match ids, args with
               | [], [] ->
@@ -1313,7 +1313,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
             in
             Lsequence(lam, loop ids0 map)
         | Tstr_include incl ->
-            let ids = bound_value_identifiers incl.incl_type in
+            let ids = bound_value_identifiers (Signature.unpack incl.incl_type) in
             let modl = incl.incl_mod in
             let mid = Ident.create_local "include" in
             let loc = of_location ~scopes incl.incl_loc in
@@ -1665,7 +1665,7 @@ let transl_toplevel_item ~scopes item =
         in
         Lletrec(class_bindings, body)
   | Tstr_include incl ->
-      let ids = bound_value_identifiers incl.incl_type in
+      let ids = bound_value_identifiers (Signature.unpack incl.incl_type) in
       let loc = of_location ~scopes incl.incl_loc in
       let modl = incl.incl_mod in
       let modl =

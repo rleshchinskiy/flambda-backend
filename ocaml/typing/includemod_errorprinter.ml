@@ -148,7 +148,7 @@ module Illegal_permutation = struct
         end
     | Mty_signature s , [] -> List.rev ctx, s
     | Mty_signature s, Item k :: q ->
-        begin match runtime_item k s with
+        begin match runtime_item k (Types.Signature.unpack s) with
         | Sig_module (id, _, md,_,_) ->
             find env (Context.Module id :: ctx) q md.md_type
         | _ -> raise Not_found
@@ -160,7 +160,7 @@ module Illegal_permutation = struct
     | _ -> raise Not_found
 
   let find env path mt = find env [] path mt
-  let item mt k = Includemod.item_ident_name (runtime_item k mt)
+  let item mt k = Includemod.item_ident_name (runtime_item k (Types.Signature.unpack mt))
 
   let pp_item ppf (id,_,kind) =
     Format.fprintf ppf "%s %S"
@@ -291,8 +291,8 @@ module With_shorthand = struct
   (** Shorthand computation from named item *)
   let modtype (r : _ named) = match r.item with
     | Types.Mty_ident _
-    | Types.Mty_alias _
-    | Types.Mty_signature []
+    | Types.Mty_alias _ -> Original r.item
+    | Types.Mty_signature sg when Types.Signature.is_empty sg
       -> Original r.item
     | Types.Mty_signature _ | Types.Mty_functor _
       -> Synthetic r
@@ -326,7 +326,7 @@ module With_shorthand = struct
 
   let qualified_param x = match functor_param x with
     | Unit -> Format.dprintf "()"
-    | Named (None, Original (Mty_signature []) ) ->
+    | Named (None, Original (Mty_signature sg) ) when Types.Signature.is_empty sg ->
         Format.dprintf "(sig end)"
     | Named (None, short_mty) ->
         pp dmodtype short_mty

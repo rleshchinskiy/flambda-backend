@@ -338,7 +338,7 @@ let iter_type_expr_kind f = function
 
 let type_iterators =
   let it_signature it =
-    List.iter (it.it_signature_item it)
+    Types.Signature.iter (it.it_signature_item it)
   and it_signature_item it = function
       Sig_value (_, vd, _)          -> it.it_value_description it vd
     | Sig_type (_, td, _, _)        -> it.it_type_declaration it td

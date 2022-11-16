@@ -644,14 +644,14 @@ and subst_lazy_signature scoping s sg =
      Lazy_backtrack.create (scoping, s, sg)
 
 and force_signature sg =
-  List.map force_signature_item (force_signature_once sg)
+  Types.Signature.pack (List.map force_signature_item (force_signature_once sg))
 
 and force_signature_once sg =
   lazy_signature' (Lazy_backtrack.force force_signature_once' sg)
 
 and lazy_signature' = function
   | S_lazy sg -> sg
-  | S_eager sg -> List.map lazy_signature_item sg
+  | S_eager sg -> List.map lazy_signature_item (Types.Signature.unpack sg)
 
 and force_signature_once' (scoping, s, sg) =
   let sg = lazy_signature' sg in

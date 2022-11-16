@@ -995,13 +995,13 @@ module Analyser =
         | Element_module_comment _ -> fun _ -> true
         | Element_included_module _ -> fun _ -> true
         in
-        List.exists f lsig
+        Types.Signature.exists f lsig
       in
       List.filter pred l
 
     and filter_extension_constructors_with_module_type_constraint l lsig =
       let pred xt =
-        List.exists
+        Types.Signature.exists
           (function
               Types.Sig_typext (ident, _, _, _) ->
                 let n1 = Name.simple xt.xt_name
@@ -1863,7 +1863,7 @@ module Analyser =
        let kind = Module_struct elements2 in
        {
          m_name = mod_name ;
-         m_type = Types.Mty_signature [] ;
+         m_type = Types.Mty_signature Types.Signature.empty ;
          m_info = info_opt ;
          m_is_interface = false ;
          m_file = !file_name ;

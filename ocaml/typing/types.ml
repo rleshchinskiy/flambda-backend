@@ -329,6 +329,7 @@ type visibility =
   | Exported
   | Hidden
 
+
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
@@ -381,6 +382,27 @@ and ext_status =
   | Text_next                      (* not first constructor of an extension *)
   | Text_exception                 (* an exception *)
 
+module Signature = struct
+  let unpack items = items
+
+  let pack items = items
+
+  let map = List.map
+
+  let filter_map = List.filter_map
+
+  let iter = List.iter
+
+  let fold = List.fold_left
+
+  let exists = List.exists
+
+  let empty = []
+
+  let is_empty = function
+    | [] -> true
+    | _ -> false
+end
 
 (* Constructor and record label descriptions inserted held in typing
    environments *)
@@ -451,15 +473,18 @@ type label_description =
     lbl_uid: Uid.t;
    }
 
-let rec bound_value_identifiers = function
-    [] -> []
-  | Sig_value(id, {val_kind = Val_reg}, _) :: rem ->
-      id :: bound_value_identifiers rem
-  | Sig_typext(id, _, _, _) :: rem -> id :: bound_value_identifiers rem
-  | Sig_module(id, Mp_present, _, _, _) :: rem ->
-      id :: bound_value_identifiers rem
-  | Sig_class(id, _, _, _) :: rem -> id :: bound_value_identifiers rem
-  | _ :: rem -> bound_value_identifiers rem
+let bound_value_identifiers items =
+  let rec identifiers = function
+      [] -> []
+    | Sig_value(id, {val_kind = Val_reg}, _) :: rem ->
+        id :: identifiers rem
+    | Sig_typext(id, _, _, _) :: rem -> id :: identifiers rem
+    | Sig_module(id, Mp_present, _, _, _) :: rem ->
+        id :: identifiers rem
+    | Sig_class(id, _, _, _) :: rem -> id :: identifiers rem
+    | _ :: rem -> identifiers rem
+    in
+    identifiers items
 
 let signature_item_id = function
   | Sig_value (id, _, _)

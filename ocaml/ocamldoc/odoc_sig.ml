@@ -58,7 +58,7 @@ module Signature_search =
 
     let table signat =
       let t = Hashtbl.create 13 in
-      List.iter (add_to_hash t) signat;
+      Types.Signature.iter (add_to_hash t) signat;
       t
 
     let search_value table name =

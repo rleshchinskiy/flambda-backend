@@ -76,7 +76,7 @@ let rec add_signature env root ?rel signat =
     | Types.Sig_class (ident, _, _, _) -> { env with env_classes = (rel_name ident, qualify ident) :: env.env_classes }
     | Types.Sig_class_type (ident, _, _, _) -> { env with env_class_types = (rel_name ident, qualify ident) :: env.env_class_types }
   in
-  List.fold_left f env signat
+  Types.Signature.fold f env signat
 
 let add_extension env full_name =
   let simple_name = Name.simple full_name in

@@ -134,7 +134,7 @@ let strengthen_decl ~aliasable env md p =
              (Subst.Lazy.of_module_decl md) p in
   Subst.Lazy.force_module_decl md
 
-let sig_make_manifest = List.map (function
+let sig_make_manifest = Signature.map (function
   | (Sig_value _ | Sig_class _ | Sig_class_type _ | Sig_typext _) as t -> t
   | Sig_type (id,decl,rs,vis) ->
     let newdecl =
@@ -171,22 +171,20 @@ let rec make_aliases_absent pres mty =
   match mty with
   | Mty_alias _ -> Mp_absent, mty
   | Mty_signature sg ->
-      pres, Mty_signature(make_aliases_absent_sig sg)
+      pres,
+      Mty_signature (Signature.map make_aliases_absent_sig_item sg)
   | Mty_functor(arg, res) ->
       let _, res = make_aliases_absent Mp_present res in
       pres, Mty_functor(arg, res)
   | mty ->
       pres, mty
 
-and make_aliases_absent_sig sg =
-  match sg with
-    [] -> []
-  | Sig_module(id, pres, md, rs, priv) :: rem ->
+and make_aliases_absent_sig_item =function
+  | Sig_module(id, pres, md, rs, priv) ->
       let pres, md_type = make_aliases_absent pres md.md_type in
-      let md = { md with md_type } in
-      Sig_module(id, pres, md, rs, priv) :: make_aliases_absent_sig rem
-  | sigelt :: rem ->
-      sigelt :: make_aliases_absent_sig rem
+        let md = { md with md_type } in
+        Sig_module(id, pres, md, rs, priv)
+  | sigelt -> sigelt
 
 let scrape_for_type_of env pres mty =
   let rec loop env path mty =
@@ -284,7 +282,7 @@ and nondep_sig_item env va ids = function
 and nondep_sig env va ids sg =
   let scope = Ctype.create_scope () in
   let sg, env = Env.enter_signature ~scope sg env in
-  List.map (nondep_sig_item env va ids) sg
+  Signature.map (nondep_sig_item env va ids) sg
 
 and nondep_modtype_decl env ids mtd =
   {mtd with mtd_type = Option.map (nondep_mty env Strict ids) mtd.mtd_type}
@@ -329,8 +327,7 @@ let enrich_typedecl env p id decl =
 
 let rec enrich_modtype env p mty =
   match mty with
-    Mty_signature sg ->
-      Mty_signature(List.map (enrich_item env p) sg)
+    Mty_signature sg -> Mty_signature (Signature.map (enrich_item env p) sg)
   | _ ->
       mty
 
@@ -351,12 +348,11 @@ let rec type_paths env p mty =
   match scrape env mty with
     Mty_ident _ -> []
   | Mty_alias _ -> []
-  | Mty_signature sg -> type_paths_sig env p sg
+  | Mty_signature sg -> type_paths_sig env p (Signature.unpack sg)
   | Mty_functor _ -> []
 
-and type_paths_sig env p sg =
-  match sg with
-    [] -> []
+and type_paths_sig env p = function
+  | [] -> []
   | Sig_type(id, _decl, _, _) :: rem ->
       Pdot(p, Ident.name id) :: type_paths_sig env p rem
   | Sig_module(id, pres, md, _, _) :: rem ->
@@ -380,20 +376,21 @@ let rec no_code_needed_mod env pres mty =
       | Mty_alias _ -> false
     end
 
-and no_code_needed_sig env sg =
-  match sg with
-    [] -> true
+and no_code_needed_sig env sg = no_code_needed_sig_items env (Signature.unpack sg)
+
+and no_code_needed_sig_items env = function
+  | [] -> true
   | Sig_value(_id, decl, _) :: rem ->
       begin match decl.val_kind with
-      | Val_prim _ -> no_code_needed_sig env rem
+      | Val_prim _ -> no_code_needed_sig_items env rem
       | _ -> false
       end
   | Sig_module(id, pres, md, _, _) :: rem ->
       no_code_needed_mod env pres md.md_type &&
-      no_code_needed_sig
+      no_code_needed_sig_items
         (Env.add_module_declaration ~check:false id pres md env) rem
   | (Sig_type _ | Sig_modtype _ | Sig_class_type _) :: rem ->
-      no_code_needed_sig env rem
+      no_code_needed_sig_items env rem
   | (Sig_typext _ | Sig_class _) :: _ ->
       false
 
@@ -415,7 +412,7 @@ let rec contains_type env = function
   | Mty_alias _ ->
       false
 
-and contains_type_sig env = List.exists (contains_type_item env)
+and contains_type_sig env = Signature.exists (contains_type_item env)
 
 and contains_type_item env = function
     Sig_type (_,({type_manifest = None} |
@@ -487,7 +484,7 @@ let collect_arg_paths mty =
     | Sig_module (id, _, {md_type=Mty_alias p}, _, _) ->
         bindings := Ident.add id p !bindings
     | Sig_module (id, _, {md_type=Mty_signature sg}, _, _) ->
-        List.iter
+        Signature.iter
           (function Sig_module (id', _, _, _, _) ->
               subst :=
                 Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
@@ -511,7 +508,8 @@ let rec remove_aliases_mty env args pres mty =
   let res =
     match args.scrape env mty with
       Mty_signature sg ->
-        Mp_present, Mty_signature (remove_aliases_sig env args' sg)
+        Mp_present,
+        Mty_signature (Signature.unpack sg |> remove_aliases_sig env args' |> Signature.pack)
     | Mty_alias _ ->
         let mty' = Env.scrape_alias env mty in
         if mty' = mty then begin

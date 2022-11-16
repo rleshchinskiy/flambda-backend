@@ -225,7 +225,7 @@ let process_file sourcefile =
         let m =
           {
             Odoc_module.m_name = mod_name ;
-            Odoc_module.m_type = Types.Mty_signature [] ;
+            Odoc_module.m_type = Types.Mty_signature Types.Signature.empty ;
             Odoc_module.m_info;
             Odoc_module.m_is_interface = true ;
             Odoc_module.m_file = file ;

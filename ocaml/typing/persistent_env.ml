@@ -313,7 +313,7 @@ let make_cmi penv modname sign alerts =
   let crcs = imports penv in
   {
     cmi_name = modname;
-    cmi_sign = sign;
+    cmi_sign = Types.Signature.unpack sign;
     cmi_crcs = crcs;
     cmi_flags = flags
   }

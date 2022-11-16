@@ -116,7 +116,7 @@ let extract_sig_open env loc mty =
 (* Extract the signature of a functor's body, using the provided [sig_acc]
    signature to fill in names from its parameter *)
 let extract_sig_functor_open funct_body env loc mty sig_acc =
-  let sig_acc = List.rev sig_acc in
+  let sig_acc = Signature.pack (List.rev sig_acc) in
   match Env.scrape_alias env mty with
   | Mty_functor (Named (param, mty_param),mty_result) as mty_func ->
       let sg_param =
@@ -306,7 +306,7 @@ let check_type_decl env sg loc id row_id newdecl decl =
   in
   let newdecl = Subst.type_declaration sub newdecl in
   let decl = Subst.type_declaration sub decl in
-  let sg = List.map (Subst.signature_item Keep sub) sg in
+  let sg = Signature.map (Subst.signature_item Keep sub) sg in
   let env = Env.add_type ~check:false fresh_id newdecl env in
   let env =
     match fresh_row_id with
@@ -481,7 +481,8 @@ let check_well_formed_module env loc context mty =
      Printtyp.modtype mty; *)
   let open Btype in
   let iterator =
-    let rec check_signature env = function
+    let check_signature env sg = 
+      let rec check = function
       | [] -> ()
       | Sig_module (id, _, mty, Trec_first, _) :: rem ->
           let (id_mty_l, rem) = extract_next_modules rem in
@@ -491,9 +492,11 @@ let check_well_formed_module env loc context mty =
             raise (Error (loc, Lazy.force env,
                           Badly_formed_signature(context, err)))
           end;
-          check_signature env rem
+          check rem
       | _ :: rem ->
-          check_signature env rem
+          check rem
+      in
+      check (Signature.unpack sg)
     in
     let env, super = iterator_with_env env in
     { super with
@@ -898,19 +901,21 @@ and approx_module_declaration env pmd =
     md_uid = Uid.internal_not_actually_unique;
   }
 
-and approx_sig env ssg =
+and approx_sig env ssg = Signature.pack (approx_sig_items env ssg)
+
+and approx_sig_items env ssg =
   match ssg with
     [] -> []
   | item :: srem ->
       match item.psig_desc with
       | Psig_type (rec_flag, sdecls) ->
           let decls = Typedecl.approx_type_decl sdecls in
-          let rem = approx_sig env srem in
+          let rem = approx_sig_items env srem in
           map_rec_type ~rec_flag
             (fun rs (id, info) -> Sig_type(id, info, rs, Exported)) decls rem
-      | Psig_typesubst _ -> approx_sig env srem
+      | Psig_typesubst _ -> approx_sig_items env srem
       | Psig_module { pmd_name = { txt = None; _ }; _ } ->
-          approx_sig env srem
+          approx_sig_items env srem
       | Psig_module pmd ->
           let scope = Ctype.create_scope () in
           let md = approx_module_declaration env pmd in
@@ -923,7 +928,7 @@ and approx_sig env ssg =
             Env.enter_module_declaration ~scope (Option.get pmd.pmd_name.txt)
               pres md env
           in
-          Sig_module(id, pres, md, Trec_not, Exported) :: approx_sig newenv srem
+          Sig_module(id, pres, md, Trec_not, Exported) :: approx_sig_items newenv srem
       | Psig_modsubst pms ->
           let scope = Ctype.create_scope () in
           let _, md =
@@ -938,7 +943,7 @@ and approx_sig env ssg =
           let _, newenv =
             Env.enter_module_declaration ~scope pms.pms_name.txt pres md env
           in
-          approx_sig newenv srem
+          approx_sig_items newenv srem
       | Psig_recmodule sdecls ->
           let scope = Ctype.create_scope () in
           let decls =
@@ -960,24 +965,24 @@ and approx_sig env ssg =
           map_rec
             (fun rs (id, md) -> Sig_module(id, Mp_present, md, rs, Exported))
             decls
-            (approx_sig newenv srem)
+            (approx_sig_items newenv srem)
       | Psig_modtype d ->
           let info = approx_modtype_info env d in
           let scope = Ctype.create_scope () in
           let (id, newenv) =
             Env.enter_modtype ~scope d.pmtd_name.txt info env
           in
-          Sig_modtype(id, info, Exported) :: approx_sig newenv srem
+          Sig_modtype(id, info, Exported) :: approx_sig_items newenv srem
       | Psig_modtypesubst d ->
           let info = approx_modtype_info env d in
           let scope = Ctype.create_scope () in
           let (_id, newenv) =
             Env.enter_modtype ~scope d.pmtd_name.txt info env
           in
-          approx_sig newenv srem
+          approx_sig_items newenv srem
       | Psig_open sod ->
           let _, env = type_open_descr env sod in
-          approx_sig env srem
+          approx_sig_items env srem
       | Psig_include sincl ->
           let sloc = sincl.pincl_loc in
           if has_include_functor env sloc sincl.pincl_attributes then
@@ -987,10 +992,10 @@ and approx_sig env ssg =
           let scope = Ctype.create_scope () in
           let sg, newenv = Env.enter_signature ~scope
               (extract_sig env smty.pmty_loc mty) env in
-          sg @ approx_sig newenv srem
+          Signature.unpack sg @ approx_sig_items newenv srem
       | Psig_class sdecls | Psig_class_type sdecls ->
           let decls = Typeclass.approx_class_declarations env sdecls in
-          let rem = approx_sig env srem in
+          let rem = approx_sig_items env srem in
           map_rec (fun rs decl ->
             let open Typeclass in [
               Sig_class_type(decl.clsty_ty_id, decl.clsty_ty_decl, rs,
@@ -1001,7 +1006,7 @@ and approx_sig env ssg =
           ) decls [rem]
           |> List.flatten
       | _ ->
-          approx_sig env srem
+          approx_sig_items env srem
 
 and approx_modtype_info env sinfo =
   {
@@ -1320,7 +1325,7 @@ end = struct
         Some component
       end
     in
-    List.filter_map simplify_item sg
+    Signature.filter_map simplify_item sg
 end
 
 let has_remove_aliases_attribute attr =
@@ -1697,7 +1702,7 @@ and transl_signature env (sg : Parsetree.signature) =
             incl_loc = sloc;
           }
         in
-        mksig (Tsig_include incl) env loc, sg, newenv
+        mksig (Tsig_include incl) env loc, Signature.unpack sg, newenv
     | Psig_class cl ->
         let (classes, newenv) = Typeclass.class_descriptions env cl in
         List.iter (fun cls ->
@@ -1776,7 +1781,7 @@ and transl_signature env (sg : Parsetree.signature) =
        let (trem, rem, final_env) =
          transl_sig (Env.in_signature true env) [] [] sg
        in
-       let rem = Signature_names.simplify final_env names rem in
+       let rem = Signature_names.simplify final_env names (Signature.pack rem) in
        let sg =
          { sig_items = trem; sig_type = rem; sig_final_env = final_env }
        in
@@ -1923,7 +1928,7 @@ let rec nongen_modtype env f = function
   | Mty_alias _ -> false
   | Mty_signature sg ->
       let env = Env.add_signature sg env in
-      List.exists (nongen_signature_item env f) sg
+      Signature.exists (nongen_signature_item env f) sg
   | Mty_functor(arg_opt, body) ->
       let env =
         match arg_opt with
@@ -1954,11 +1959,11 @@ let check_nongen_signature_item env sig_item =
   | _ -> ()
 
 let check_nongen_signature env sg =
-  List.iter (check_nongen_signature_item env) sg
+  Signature.iter (check_nongen_signature_item env) sg
 
 let remove_mode_variables env sg =
   let rm _env ty = Ctype.remove_mode_variables ty; false in
-  List.exists (nongen_signature_item env rm) sg |> ignore
+  Signature.exists (nongen_signature_item env rm) sg |> ignore
 
 (* Helpers for typing recursive modules *)
 
@@ -2104,7 +2109,7 @@ let check_recmodule_inclusion env bindings =
 (* Helper for unpack *)
 
 let rec package_constraints_sig env loc sg constrs =
-  List.map
+  Signature.map
     (function
       | Sig_type (id, ({type_params=[]} as td), rs, priv)
         when List.mem_assoc [Ident.name id] constrs ->
@@ -2261,7 +2266,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
           mod_loc = smod.pmod_loc }
       in
       let sg' = Signature_names.simplify _finalenv names sg in
-      if List.length sg' = List.length sg then md, shape else
+      if List.length (Signature.unpack sg') = List.length (Signature.unpack sg) then md, shape else
       wrap_constraint_with_shape env false md
         (Mty_signature sg') shape Tmodtype_implicit
   | Pmod_functor(arg_opt, sbody) ->
@@ -2516,7 +2521,7 @@ and type_open_decl_aux ?used_slot ?toplevel funct_body names env od =
         | Sig_class(id, cd, rs, _) -> Sig_class(id, cd, rs, visibility)
         | Sig_class_type(id, ctd, rs, _) ->
             Sig_class_type(id, ctd, rs, visibility)
-      ) sg
+      ) (Signature.unpack sg)
     in
     let open_descr = {
       open_expr = md;
@@ -2887,7 +2892,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
             incl_loc = sloc;
           }
         in
-        Tstr_include incl, sg, shape, new_env
+        Tstr_include incl, Signature.unpack sg, shape, new_env
     | Pstr_extension (ext, _attrs) ->
         raise (Error_forward (Builtin_attributes.error_of_extension ext))
     | Pstr_attribute attr ->
@@ -2898,7 +2903,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
   let rec type_struct env shape_map sstr str_acc sig_acc sig_acc_include_functor =
     match sstr with
     | [] ->
-      (List.rev str_acc, List.rev sig_acc, shape_map, env)
+      (List.rev str_acc, Signature.pack (List.rev sig_acc), shape_map, env)
     | pstr :: srem ->
         let previous_saved_types = Cmt_format.get_saved_types () in
         let desc, sg, shape_map, new_env = type_str_item env shape_map pstr sig_acc_include_functor in
@@ -2955,7 +2960,7 @@ let rec normalize_modtype = function
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body
 
-and normalize_signature sg = List.iter normalize_signature_item sg
+and normalize_signature sg = Signature.iter normalize_signature_item sg
 
 and normalize_signature_item = function
     Sig_value(_id, desc, _) -> Ctype.normalize_type desc.val_type
@@ -2998,7 +3003,7 @@ let rec extend_path path =
 (* Lookup a type's longident within a signature *)
 let lookup_type_in_sig sg =
   let types, modules =
-    List.fold_left
+  Signature.fold
       (fun acc item ->
          match item with
          | Sig_type(id, _, _, _) ->
@@ -3089,8 +3094,10 @@ let type_package env m p fl =
 (* Fill in the forward declarations *)
 
 let type_open_decl ?used_slot env od =
-  type_open_decl ?used_slot ?toplevel:None false (Signature_names.create ()) env
+  let od, sg, env = type_open_decl ?used_slot ?toplevel:None false (Signature_names.create ()) env
     od
+in
+od, Signature.pack sg, env
 
 let type_open_descr ?used_slot env od =
   type_open_descr ?used_slot ?toplevel:None env od
@@ -3274,7 +3281,7 @@ let package_units initial_env objfiles cmifile modulename =
       objfiles in
   (* Compute signature of packaged unit *)
   Ident.reinit();
-  let sg = package_signatures units in
+  let sg = Signature.pack (package_signatures units) in
   (* Compute the shape of the package *)
   let prefix = Filename.remove_extension cmifile in
   let pack_uid = Uid.of_compilation_unit_id (Ident.create_persistent prefix) in
@@ -3315,7 +3322,7 @@ let package_units initial_env objfiles cmifile modulename =
           (prefix ^ ".cmi") imports
       in
       Cmt_format.save_cmt (prefix ^ ".cmt")  modulename
-        (Cmt_format.Packed (cmi.Cmi_format.cmi_sign, objfiles)) None initial_env
+        (Cmt_format.Packed (Signature.pack cmi.Cmi_format.cmi_sign, objfiles)) None initial_env
         (Some cmi) (Some shape);
     end;
     Tcoerce_none

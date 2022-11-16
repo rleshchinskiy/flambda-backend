@@ -59,7 +59,7 @@ let simpl_module_type ?code t =
     | Mty_signature _ ->
         (
          match code with
-           None -> Mty_signature []
+           None -> Mty_signature Signature.empty
          | Some s -> raise (Use_code s)
         )
     | Mty_functor (Unit, mt) -> Mty_functor (Unit, iter mt)

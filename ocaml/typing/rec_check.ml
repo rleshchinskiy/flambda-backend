@@ -1030,7 +1030,7 @@ and structure_item : Typedtree.structure_item -> bind_judg =
           (list class_declaration classes m)
           (Env.remove_list class_ids env)
     | Tstr_include { incl_mod = mexp; incl_type = mty; _ } ->
-      let included_ids = List.map Types.signature_item_id mty in
+      let included_ids = List.map Types.signature_item_id (Types.Signature.unpack mty) in
       Env.join (modexp mexp m) (Env.remove_list included_ids env)
 
 (* G |- module M = E : m -| G *)

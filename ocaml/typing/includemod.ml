@@ -338,7 +338,7 @@ let build_component_table pos_rep sg =
           build_table (nb_exported + 1) nextpos
             (FieldMap.add name (id, item, pos_rep pos id) tbl) rem
   in
-  build_table 0 0 FieldMap.empty sg
+  build_table 0 0 FieldMap.empty (Signature.unpack sg)
 
 
 (* Pair each component of sig2 with a component of sig1,
@@ -386,7 +386,7 @@ let pair_components subst sig1_comps sig2 =
         pair subst paired unpaired rem
       end
   in
-  pair subst [] [] sig2
+  pair subst [] [] (Signature.unpack sig2)
 
 
 let retrieve_functor_params env mty =
@@ -656,7 +656,7 @@ and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
     Env.add_signature sig1 (Env.in_signature true env) in
   (* Keep ids for module aliases *)
   let (id_pos_list,_) =
-    List.fold_left
+    Signature.fold
       (fun (l,pos) -> function
           Sig_module (id, Mp_present, _, _, _) ->
             ((id,pos,Tcoerce_none)::l , pos+1)
@@ -666,7 +666,7 @@ and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
     build_component_table (fun pos _name -> pos) sig1
   in
   let exported_len2, runtime_len2 =
-    List.fold_left (fun (el, rl) i ->
+    Signature.fold (fun (el, rl) i ->
       let el = match item_visibility i with Hidden -> el | Exported -> el + 1 in
       let rl = if is_runtime_component i then rl + 1 else rl in
       el, rl

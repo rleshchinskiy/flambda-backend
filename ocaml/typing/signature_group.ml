@@ -101,8 +101,8 @@ let next x =
   not_in_group [] x
 
 let seq l = Seq.unfold next l
-let iter f l = Seq.iter f (seq l)
-let fold f acc l = Seq.fold_left f acc (seq l)
+let iter f sg = Types.Signature.unpack sg |> seq |> Seq.iter f
+let fold f acc sg = Types.Signature.unpack sg |> seq |> Seq.fold_left f acc
 
 let update_rec_next rs rem =
   match rs with
@@ -116,7 +116,7 @@ let update_rec_next rs rem =
       | _ -> rem
 
 type in_place_patch = {
-  ghosts: Types.signature;
+  ghosts: Types.signature_item list;
   replace_by: Types.signature_item option;
 }
 
@@ -152,4 +152,4 @@ let replace_in_place f sg =
             in
             core_group f ~before ~ghosts ~before_group q ~sg
   in
-  next_group f [] sg
+  next_group f [] (Types.Signature.unpack sg) |> Option.map (fun (x,sg) -> (x, Types.Signature.pack sg))

@@ -354,7 +354,7 @@ let parse_warnings ppf iserr s =
 let trim_signature = function
     Mty_signature sg ->
       Mty_signature
-        (List.map
+        (Signature.map
            (function
                Sig_module (id, pres, md, rs, priv) ->
                  let attribute =
@@ -384,7 +384,7 @@ let show_prim to_sig ppf lid =
           raise Exit
     in
     let id = Ident.create_persistent s in
-    let sg = to_sig env loc id lid in
+    let sg = Signature.pack (to_sig env loc id lid) in
     Printtyp.wrap_printing_env ~error:false env
       (fun () -> fprintf ppf "@[%a@]@." Printtyp.signature sg)
   with

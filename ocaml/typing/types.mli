@@ -621,7 +621,7 @@ and functor_parameter =
   | Unit
   | Named of Ident.t option * module_type
 
-and signature = signature_item list
+and signature
 
 and signature_item =
     Sig_value of Ident.t * value_description * visibility
@@ -648,6 +648,18 @@ and modtype_declaration =
     mtd_loc: Location.t;
     mtd_uid: Uid.t;
   }
+
+module Signature : sig
+  val unpack : signature -> signature_item list
+  val pack : signature_item list -> signature
+  val map : (signature_item -> signature_item) -> signature -> signature
+  val filter_map : (signature_item -> signature_item option) -> signature -> signature
+  val iter : (signature_item -> unit) -> signature -> unit
+  val fold : ('a -> signature_item -> 'a) -> 'a -> signature -> 'a
+  val exists : (signature_item -> bool) -> signature -> bool
+  val empty : signature
+  val is_empty : signature -> bool
+end
 
 val item_visibility : signature_item -> visibility
 
@@ -704,7 +716,7 @@ type label_description =
     "Value" identifiers are identifiers for signature components that
     correspond to a run-time value: values, extensions, modules, classes.
     Note: manifest primitives do not correspond to a run-time value! *)
-val bound_value_identifiers: signature -> Ident.t list
+val bound_value_identifiers: signature_item list -> Ident.t list
 
 val signature_item_id : signature_item -> Ident.t
 

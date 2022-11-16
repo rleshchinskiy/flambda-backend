@@ -1839,7 +1839,7 @@ let with_hidden_items ids f =
 
 
 let add_sigitem env x =
-  Env.add_signature (Signature_group.flatten x) env
+  Env.add_signature (Signature.pack (Signature_group.flatten x)) env
 
 let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_ident p ->
@@ -1873,7 +1873,7 @@ and tree_of_signature sg =
   wrap_env (fun env -> env)(fun sg ->
       let tree_groups = tree_of_signature_rec !printing_env sg in
       List.concat_map (fun (_env,l) -> List.map snd l) tree_groups
-    ) sg
+    ) (Signature.unpack sg)
 
 and tree_of_signature_rec env' sg =
   let structured = List.of_seq (Signature_group.seq sg) in
@@ -1891,7 +1891,7 @@ and tree_of_signature_rec env' sg =
 and trees_of_recursive_sigitem_group env
     (syntactic_group: Signature_group.rec_group) =
   let display (x:Signature_group.sig_item) = x.src, tree_of_sigitem x.src in
-  let env = Env.add_signature syntactic_group.pre_ghosts env in
+  let env = Env.add_signature (Signature.pack syntactic_group.pre_ghosts) env in
   match syntactic_group.group with
   | Not_rec x -> add_sigitem env x, [display x]
   | Rec_group items ->

@@ -91,18 +91,16 @@ type directive_info = {
 
 let remembered = ref Ident.empty
 
-let rec remember phrase_name i = function
-  | [] -> ()
-  | Sig_module (_, _, { md_type = Mty_alias _; _ }, _, _)
-    :: rest ->
-      remember phrase_name i rest
-  | Sig_value  (id, _, _) :: rest
-  | Sig_module (id, _, _, _, _) :: rest
-  | Sig_typext (id, _, _, _) :: rest
-  | Sig_class  (id, _, _, _) :: rest ->
+let remember phrase_name i sg = ignore (List.fold_left
+  (fun i -> function
+  | Sig_module (_, _, { md_type = Mty_alias _; _ }, _, _) -> i
+  | Sig_value  (id, _, _)
+  | Sig_module (id, _, _, _, _)
+  | Sig_typext (id, _, _, _)
+  | Sig_class  (id, _, _, _) ->
       remembered := Ident.add id (phrase_name, i) !remembered;
-      remember phrase_name (succ i) rest
-  | _ :: rest -> remember phrase_name i rest
+      succ i
+  | _ -> i) i sg)
 
 let toplevel_value id =
   try Ident.find_same id !remembered
@@ -410,7 +408,7 @@ let name_expression ~loc ~attrs exp =
   let final_env = Env.add_value id vd exp.exp_env in
   let str =
     { str_items = [item];
-      str_type = sg;
+      str_type = Types.Signature.pack sg;
       str_final_env = final_env }
   in
   str, sg
@@ -450,7 +448,7 @@ let execute_phrase print_outcome ppf phr =
           ] ->
             let str, sg' = name_expression ~loc ~attrs e in
             str, sg', true
-        | _ -> str, sg', false
+        | _ -> str, Types.Signature.unpack sg', false
       in
       let module_ident, res, required_globals, size =
         if any_flambda then

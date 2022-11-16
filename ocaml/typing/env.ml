@@ -902,7 +902,7 @@ let components_of_module ~alerts ~uid env ps path addr mty shape =
 
 let sign_of_cmi ~freshen { Persistent_env.Persistent_signature.cmi; _ } =
   let name = cmi.cmi_name in
-  let sign = cmi.cmi_sign in
+  let sign = Types.Signature.pack cmi.cmi_sign in
   let flags = cmi.cmi_flags in
   let id = Ident.create_persistent name in
   let path = Pident id in
@@ -2375,12 +2375,11 @@ let add_item (map, mod_shape) comp env =
       let map, shape = proj_shape (Shape.Item.class_type id) in
       map, add_cltype ?shape id decl env
 
-let rec add_signature (map, mod_shape) sg env =
-  match sg with
-      [] -> map, env
-  | comp :: rem ->
-      let map, env = add_item (map, mod_shape) comp env in
-      add_signature (map, mod_shape) rem env
+let add_signature (map, mod_shape) sg env =
+  Types.Signature.fold
+    (fun (map, env) comp -> add_item (map, mod_shape) comp env)
+    (map, env)
+    sg
 
 let enter_signature_and_shape ~scope ~parent_shape mod_shape sg env =
   let sg = Subst.signature (Rescope scope) Subst.identity sg in

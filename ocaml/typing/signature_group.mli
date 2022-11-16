@@ -37,7 +37,7 @@ type sig_item =
   }
 
 (** [flatten sig_item] is [x.src :: x.post_ghosts] *)
-val flatten: sig_item -> Types.signature
+val flatten: sig_item -> Types.signature_item list
 
 (** A group of mutually recursive definition *)
 type core_rec_group =
@@ -58,15 +58,15 @@ type rec_group =
     The second element of the tuple in the {!full_seq} case is the not-yet
     traversed part of the signature.
 *)
-val next: Types.signature -> (rec_group * Types.signature) option
-val seq: Types.signature -> rec_group Seq.t
+val next: Types.signature_item list -> (rec_group * Types.signature_item list) option
+val seq: Types.signature_item list -> rec_group Seq.t
 
 val iter: (rec_group -> unit) -> Types.signature -> unit
 val fold: ('acc -> rec_group -> 'acc) -> 'acc -> Types.signature -> 'acc
 
 (** Describe how to amend one element of a signature *)
 type in_place_patch = {
-  ghosts: Types.signature; (** updated list of ghost items *)
+  ghosts: Types.signature_item list; (** updated list of ghost items *)
   replace_by: Types.signature_item option;
   (** replacement for the selected item *)
 }
@@ -80,6 +80,6 @@ type in_place_patch = {
    [component]
 *)
 val replace_in_place:
-  ( ghosts:Types.signature -> Types.signature_item
+  ( ghosts:Types.signature_item list -> Types.signature_item
     -> ('a * in_place_patch) option )
   -> Types.signature -> ('a * Types.signature) option
