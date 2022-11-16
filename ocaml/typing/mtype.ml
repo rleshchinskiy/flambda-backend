@@ -404,18 +404,18 @@ let no_code_needed env mty = no_code_needed_mod env Mp_present mty
 let rec contains_type env = function
     Mty_ident path ->
       begin try match (Env.find_modtype path env).mtd_type with
-      | None -> raise Exit (* PR#6427 *)
+      | None -> true (* PR#6427 *)
       | Some mty -> contains_type env mty
-      with Not_found -> raise Exit
+      with Not_found -> true
       end
   | Mty_signature sg ->
       contains_type_sig env sg
   | Mty_functor (_, body) ->
       contains_type env body
   | Mty_alias _ ->
-      ()
+      false
 
-and contains_type_sig env = List.iter (contains_type_item env)
+and contains_type_sig env = List.exists (contains_type_item env)
 
 and contains_type_item env = function
     Sig_type (_,({type_manifest = None} |
@@ -427,7 +427,7 @@ and contains_type_item env = function
          it would be technically safe to ignore that considering
          the current constraints which guarantee that this type
          is kept local to expressions.  *)
-      raise Exit
+      true
   | Sig_module (_, _, {md_type = mty}, _, _) ->
       contains_type env mty
   | Sig_value _
@@ -435,10 +435,7 @@ and contains_type_item env = function
   | Sig_typext _
   | Sig_class _
   | Sig_class_type _ ->
-      ()
-
-let contains_type env mty =
-  try contains_type env mty; false with Exit -> true
+      false
 
 
 (* Remove module aliases from a signature *)
