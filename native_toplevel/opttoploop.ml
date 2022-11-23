@@ -433,7 +433,7 @@ let execute_phrase print_outcome ppf phr =
       in
       if !Clflags.dump_typedtree then Printtyped.implementation ppf str;
       let sg' = Typemod.Signature_names.simplify newenv names sg in
-      let coercion = Includemod.signatures oldenv ~mark:Mark_positive sg sg' in
+      let coercion = Includemod.signatures oldenv ~mark:Mark_positive (Types.Signature.pack sg) (Types.Signature.pack sg') in
       Typecore.force_delayed_checks ();
       let str, sg', rewritten =
         match str.str_items with
@@ -448,7 +448,7 @@ let execute_phrase print_outcome ppf phr =
           ] ->
             let str, sg' = name_expression ~loc ~attrs e in
             str, sg', true
-        | _ -> str, Types.Signature.unpack sg', false
+        | _ -> str, sg', false
       in
       let module_ident, res, required_globals, size =
         if any_flambda then

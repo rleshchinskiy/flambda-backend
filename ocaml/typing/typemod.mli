@@ -25,18 +25,18 @@ open Types
 module Signature_names : sig
   type t
 
-  val simplify: Env.t -> t -> signature -> signature
+  val simplify: Env.t -> t -> signature_item list -> signature_item list
 end
 
 val type_module:
         Env.t -> Parsetree.module_expr -> Typedtree.module_expr * Shape.t
 val type_structure:
   Env.t -> Parsetree.structure ->
-  Typedtree.structure * Types.signature * Signature_names.t * Shape.t *
+  Typedtree.structure * Types.signature_item list * Signature_names.t * Shape.t *
   Env.t
 val type_toplevel_phrase:
   Env.t -> Types.signature_item list -> Parsetree.structure ->
-  Typedtree.structure * Types.signature * Signature_names.t * Shape.t *
+  Typedtree.structure * Types.signature_item list * Signature_names.t * Shape.t *
   Env.t
 val type_implementation:
   string -> string -> string -> Env.t ->

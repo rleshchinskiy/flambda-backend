@@ -61,7 +61,7 @@ type rec_group =
 val next: Types.signature_item list -> (rec_group * Types.signature_item list) option
 val seq: Types.signature_item list -> rec_group Seq.t
 
-val iter: (rec_group -> unit) -> Types.signature -> unit
+val iter: (rec_group -> unit) -> Types.signature_item list -> unit
 val fold: ('acc -> rec_group -> 'acc) -> 'acc -> Types.signature -> 'acc
 
 (** Describe how to amend one element of a signature *)

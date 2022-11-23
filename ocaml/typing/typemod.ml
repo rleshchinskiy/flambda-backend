@@ -489,6 +489,7 @@ let check_well_formed_module env loc context mty =
   let open Btype in
   let iterator =
     let check_signature env sg = 
+      let items = Mtype.unfold_signature (Lazy.force env) Subst.identity ~aliasable:true sg in
       let rec check = function
       | [] -> ()
       | Sig_module (id, _, mty, Trec_first, _) :: rem ->
@@ -503,7 +504,7 @@ let check_well_formed_module env loc context mty =
       | _ :: rem ->
           check rem
       in
-      check (Signature.unpack sg)
+      check items
     in
     let env, super = iterator_with_env env in
     { super with
@@ -1076,7 +1077,7 @@ module Signature_names : sig
   val check_sig_item:
     ?info:info -> t -> Location.t -> Signature_group.rec_group -> unit
 
-  val simplify: Env.t -> t -> Types.signature -> Types.signature
+  val simplify: Env.t -> t -> Types.signature_item list -> Types.signature_item list
 end = struct
 
   type shadowable =
@@ -1343,7 +1344,7 @@ end = struct
         Some component
       end
     in
-    Signature.filter_map simplify_item sg
+    List.filter_map simplify_item sg
 end
 
 let has_remove_aliases_attribute attr =
@@ -1711,7 +1712,7 @@ and transl_signature env (sg : Parsetree.signature) =
         let sg, newenv = Env.enter_signature ~scope sg env in
         Signature_group.iter
           (Signature_names.check_sig_item names item.psig_loc)
-          sg;
+          (Signature.unpack sg);
         let incl =
           { incl_mod = tmty;
             incl_type = sg;
@@ -1799,9 +1800,9 @@ and transl_signature env (sg : Parsetree.signature) =
        let (trem, rem, final_env) =
          transl_sig (Env.in_signature true env) [] [] sg
        in
-       let rem = Signature_names.simplify final_env names (Signature.pack rem) in
+       let rem = Signature_names.simplify final_env names rem in
        let sg =
-         { sig_items = trem; sig_type = rem; sig_final_env = final_env }
+         { sig_items = trem; sig_type = Signature.pack rem; sig_final_env = final_env }
        in
        Cmt_format.set_saved_types
          ((Cmt_format.Partial_signature sg) :: previous_saved_types);
@@ -1981,7 +1982,7 @@ let check_nongen_signature env sg =
 
 let remove_mode_variables env sg =
   let rm _env ty = Ctype.remove_mode_variables ty; false in
-  Signature.exists (nongen_signature_item env rm) sg |> ignore
+  List.exists (nongen_signature_item env rm) sg |> ignore
 
 (* Helpers for typing recursive modules *)
 
@@ -2278,15 +2279,15 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         type_structure funct_body anchor env sstr in
       let md =
         { mod_desc = Tmod_structure str;
-          mod_type = Mty_signature sg;
+          mod_type = Mty_signature (Signature.pack sg);
           mod_env = env;
           mod_attributes = smod.pmod_attributes;
           mod_loc = smod.pmod_loc }
       in
       let sg' = Signature_names.simplify _finalenv names sg in
-      if List.length (Signature.unpack sg') = List.length (Signature.unpack sg) then md, shape else
+      if List.length sg' = List.length sg then md, shape else
       wrap_constraint_with_shape env false md
-        (Mty_signature sg') shape Tmodtype_implicit
+        (Mty_signature (Signature.pack sg')) shape Tmodtype_implicit
   | Pmod_functor(arg_opt, sbody) ->
       let t_arg, ty_arg, newenv, funct_shape_param, funct_body =
         match arg_opt with
@@ -2527,7 +2528,7 @@ and type_open_decl_aux ?used_slot ?toplevel funct_body names env od =
       | Some false | None -> Some `From_open, Hidden
       | Some true -> None, Exported
     in
-    Signature_group.iter (Signature_names.check_sig_item ?info names loc) sg;
+    Signature_group.iter (Signature_names.check_sig_item ?info names loc) (Signature.unpack sg);
     let sg =
       List.map (function
         | Sig_value(id, vd, _) -> Sig_value(id, vd, visibility)
@@ -2901,7 +2902,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
           Env.enter_signature_and_shape ~scope ~parent_shape:shape_map
             modl_shape sg env
         in
-        Signature_group.iter (Signature_names.check_sig_item names loc) sg;
+        Signature_group.iter (Signature_names.check_sig_item names loc) (Signature.unpack sg);
         let incl =
           { incl_mod = modl;
             incl_type = sg;
@@ -2921,7 +2922,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
   let rec type_struct env shape_map sstr str_acc sig_acc sig_acc_include_functor =
     match sstr with
     | [] ->
-      (List.rev str_acc, Signature.pack (List.rev sig_acc), shape_map, env)
+      (List.rev str_acc, List.rev sig_acc, shape_map, env)
     | pstr :: srem ->
         let previous_saved_types = Cmt_format.get_saved_types () in
         let desc, sg, shape_map, new_env = type_str_item env shape_map pstr sig_acc_include_functor in
@@ -2934,7 +2935,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
   let previous_saved_types = Cmt_format.get_saved_types () in
   let run () =
     let (items, sg, shape_map, final_env) = type_struct env Shape.Map.empty sstr [] [] toplevel_sig in
-    let str = { str_items = items; str_type = sg; str_final_env = final_env } in
+    let str = { str_items = items; str_type = Signature.pack sg; str_final_env = final_env } in
     Cmt_format.set_saved_types
       (Cmt_format.Partial_structure str :: previous_saved_types);
     str, sg, names, Shape.str shape_map, final_env
@@ -3153,6 +3154,7 @@ let type_implementation sourcefile outputprefix modulename initial_env ast =
           (Uid.of_compilation_unit_id (Ident.create_persistent modulename))
       in
       let simple_sg = Signature_names.simplify finalenv names sg in
+      let simple_sg = Signature.pack simple_sg in
       if !Clflags.print_types then begin
         remove_mode_variables finalenv sg;
         Typecore.force_delayed_checks ();
@@ -3171,6 +3173,7 @@ let type_implementation sourcefile outputprefix modulename initial_env ast =
       end else begin
         let sourceintf =
           Filename.remove_extension sourcefile ^ !Config.interface_suffix in
+        let sg = Signature.pack sg in
         if Sys.file_exists sourceintf then begin
           let intf_file =
             try

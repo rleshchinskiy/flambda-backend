@@ -101,7 +101,7 @@ let next x =
   not_in_group [] x
 
 let seq l = Seq.unfold next l
-let iter f sg = Types.Signature.unpack sg |> seq |> Seq.iter f
+let iter f sg = seq sg |> Seq.iter f
 let fold f acc sg = Types.Signature.unpack sg |> seq |> Seq.fold_left f acc
 
 let update_rec_next rs rem =

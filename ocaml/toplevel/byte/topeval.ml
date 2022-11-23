@@ -124,7 +124,7 @@ let execute_phrase print_outcome ppf phr =
       in
       if !Clflags.dump_typedtree then Printtyped.implementation ppf str;
       let sg' = Typemod.Signature_names.simplify newenv sn sg in
-      ignore (Includemod.signatures ~mark:Mark_positive oldenv sg sg');
+      ignore (Includemod.signatures ~mark:Mark_positive oldenv (Signature.pack sg) (Signature.pack sg'));
       Typecore.force_delayed_checks ();
       let shape = Shape.local_reduce shape in
       if !Clflags.dump_shape then Shape.print ppf shape;
@@ -132,7 +132,7 @@ let execute_phrase print_outcome ppf phr =
       Warnings.check_fatal ();
       begin try
         toplevel_env := newenv;
-        toplevel_sig := List.rev_append (Types.Signature.unpack sg') oldsig;
+        toplevel_sig := List.rev_append sg' oldsig;
         let res = load_lambda ppf lam in
         let out_phr =
           match res with
@@ -147,7 +147,7 @@ let execute_phrase print_outcome ppf phr =
                         let outv = outval_of_value newenv v exp.exp_type in
                         let ty = Printtyp.tree_of_type_scheme exp.exp_type in
                         Ophr_eval (outv, ty)
-                      | None -> Ophr_signature (pr_item oldenv (Types.Signature.unpack sg')))
+                      | None -> Ophr_signature (pr_item oldenv sg'))
               else Ophr_signature []
           | Exception exn ->
               toplevel_env := oldenv;
