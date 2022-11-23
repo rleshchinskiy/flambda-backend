@@ -18,6 +18,12 @@ open Outcometree
 
 exception Ellipsis
 
+(*
+let rl_print_with =
+  Option.is_some (Sys.getenv_opt "RL_WITH")
+  || Option.is_some (Sys.getenv_opt "RL_PRINT_WITH")
+*)
+
 let cautious f ppf arg =
   try f ppf arg with
     Ellipsis -> fprintf ppf "..."
@@ -603,12 +609,34 @@ and print_simple_out_module_type ppf =
   function
     Omty_abstract -> ()
   | Omty_ident id -> fprintf ppf "%a" print_ident id
-  | Omty_signature sg ->
-     begin match sg with
+  | Omty_signature (nominal, sg) ->
+      let print_sig ppf sg = match sg with
        | [] -> fprintf ppf "sig end"
        | sg ->
           fprintf ppf "@[<hv 2>sig@ %a@;<1 -2>end@]" print_out_signature sg
-     end
+      in
+      begin match nominal with
+        | Some (id, constrs) (* when rl_print_with *) ->
+            let rec print_constrs sep ppf = function
+              | [] -> ()
+              | OmtyWith_module (l,r) :: constrs ->
+                  fprintf ppf "@ %s module %s = %a%a"
+                    sep
+                    l
+                    print_ident r
+                    (print_constrs "and") constrs
+              | OmtyWith_type (l,r) :: constrs ->
+                  fprintf ppf "@ %s type %s = %a%a"
+                    sep
+                    l
+                    print_ident r
+                    (print_constrs "and") constrs
+            in
+            fprintf ppf "@[<hv 2>%a%a@ ==>@ %a@;<1 -2>@]"
+              print_ident id (print_constrs "with") constrs
+              print_sig sg
+        | _ -> print_sig ppf sg
+      end
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple

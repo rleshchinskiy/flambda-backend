@@ -152,4 +152,4 @@ let replace_in_place f sg =
             in
             core_group f ~before ~ghosts ~before_group q ~sg
   in
-  next_group f [] (Types.Signature.unpack sg) |> Option.map (fun (x,sg) -> (x, Types.Signature.pack sg))
+  Types.Signature.update_opt (next_group f []) sg

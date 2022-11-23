@@ -1462,6 +1462,7 @@ let find_type_expansion_opt path env =
 let find_modtype_expansion_lazy path env =
   match (find_modtype_lazy path env).mtdl_type with
   | None -> raise Not_found
+  | Some (MtyL_signature sg) -> Subst.Lazy.MtyL_signature (Subst.Lazy.add_nominal (path,[]) sg)
   | Some mty -> mty
 
 let find_modtype_expansion path env =
@@ -2375,11 +2376,14 @@ let add_item (map, mod_shape) comp env =
       let map, shape = proj_shape (Shape.Item.class_type id) in
       map, add_cltype ?shape id decl env
 
-let add_signature (map, mod_shape) sg env =
-  Types.Signature.fold
+let add_signature_items (map, mod_shape) items env =
+  List.fold_left
     (fun (map, env) comp -> add_item (map, mod_shape) comp env)
     (map, env)
-    sg
+    items
+
+let add_signature (map, mod_shape) sg env =
+  add_signature_items (map, mod_shape) (Signature.unpack sg) env
 
 let enter_signature_and_shape ~scope ~parent_shape mod_shape sg env =
   let sg = Subst.signature (Rescope scope) Subst.identity sg in
@@ -2402,6 +2406,9 @@ let add_extension = add_extension ?shape:None
 let add_class = add_class ?shape:None
 let add_cltype = add_cltype ?shape:None
 let add_modtype = add_modtype ?shape:None
+let add_signature_items items env =
+  let _, env = add_signature_items (Shape.Map.empty, None) items env in
+  env
 let add_signature sg env =
   let _, env = add_signature (Shape.Map.empty, None) sg env in
   env

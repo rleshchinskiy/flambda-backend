@@ -611,6 +611,10 @@ type ext_status =
   | Text_next                      (* not first constructor in an extension *)
   | Text_exception
 
+type signature_with =
+  | Sig_with_module of string list * Path.t
+  | Sig_with_type of string list * Path.t
+
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
@@ -650,15 +654,32 @@ and modtype_declaration =
   }
 
 module Signature : sig
+  type nominal = Path.t * signature_with list
+
   val unpack : signature -> signature_item list
   val pack : signature_item list -> signature
   val map : (signature_item -> signature_item) -> signature -> signature
   val filter_map : (signature_item -> signature_item option) -> signature -> signature
   val iter : (signature_item -> unit) -> signature -> unit
   val fold : ('a -> signature_item -> 'a) -> 'a -> signature -> 'a
+  val fold_map : ('a -> signature_item -> ('a * signature_item)) -> 'a -> signature -> ('a * signature)
   val exists : (signature_item -> bool) -> signature -> bool
   val empty : signature
   val is_empty : signature -> bool
+
+  val pack_named : Path.t -> signature_item list -> signature
+  val named : Path.t -> signature -> signature
+  val add_with : signature_with -> signature -> signature
+  val add_withs : signature_with list -> signature -> signature
+
+  val pack_nominal : nominal option -> signature_item list -> signature
+  val add_nominal : nominal -> signature -> signature
+  val drop_nominal : signature -> signature
+  val get_nominal : signature -> nominal option
+
+  val update_opt :
+    (signature_item list -> ('a * signature_item list) option) -> 
+    signature -> ('a * signature) option
 end
 
 val item_visibility : signature_item -> visibility

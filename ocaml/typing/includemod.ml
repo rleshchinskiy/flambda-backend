@@ -19,6 +19,8 @@ open Misc
 open Typedtree
 open Types
 
+let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+
 type pos =
   | Module of Ident.t
   | Modtype of Ident.t
@@ -321,7 +323,7 @@ let simplify_structure_coercion cc id_pos_list =
 
 (* Build a table of the components of sig1, along with their positions.
    The table is indexed by kind and name of component *)
-let build_component_table pos_rep sg =
+let build_component_table pos_rep items =
   let rec build_table nb_exported pos tbl = function
     [] -> nb_exported, pos, tbl
   | item :: rem ->
@@ -338,7 +340,7 @@ let build_component_table pos_rep sg =
           build_table (nb_exported + 1) nextpos
             (FieldMap.add name (id, item, pos_rep pos id) tbl) rem
   in
-  build_table 0 0 FieldMap.empty (Signature.unpack sg)
+  build_table 0 0 FieldMap.empty items
 
 
 (* Pair each component of sig2 with a component of sig1,
@@ -346,7 +348,7 @@ let build_component_table pos_rep sg =
    Return a coercion list indicating, for all run-time components
    of sig2, the position of the matching run-time components of sig1
    and the coercion to be applied to it. *)
-let pair_components subst sig1_comps sig2 =
+let pair_components subst sig1_comps items2 =
   let rec pair subst paired unpaired = function
     | [] ->
       paired, unpaired, subst
@@ -386,7 +388,7 @@ let pair_components subst sig1_comps sig2 =
         pair subst paired unpaired rem
       end
   in
-  pair subst [] [] (Signature.unpack sig2)
+  pair subst [] [] items2
 
 
 let retrieve_functor_params env mty =
@@ -650,30 +652,30 @@ and strengthened_module_decl ~loc ~aliasable env ~mark
 
 (* Inclusion between signatures *)
 
-and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
+and signature_items ~in_eq ~loc env ~mark subst items1 items2 mod_shape =
   (* Environment used to check inclusion of components *)
   let new_env =
-    Env.add_signature sig1 (Env.in_signature true env) in
+    Env.add_signature_items items1 (Env.in_signature true env) in
   (* Keep ids for module aliases *)
   let (id_pos_list,_) =
-    Signature.fold
+    List.fold_left
       (fun (l,pos) -> function
           Sig_module (id, Mp_present, _, _, _) ->
             ((id,pos,Tcoerce_none)::l , pos+1)
         | item -> (l, if is_runtime_component item then pos+1 else pos))
-      ([], 0) sig1 in
+      ([], 0) items1 in
   let exported_len1, runtime_len1, comps1 =
-    build_component_table (fun pos _name -> pos) sig1
+    build_component_table (fun pos _name -> pos) items1
   in
   let exported_len2, runtime_len2 =
-    Signature.fold (fun (el, rl) i ->
+    List.fold_left (fun (el, rl) i ->
       let el = match item_visibility i with Hidden -> el | Exported -> el + 1 in
       let rl = if is_runtime_component i then rl + 1 else rl in
       el, rl
-    ) (0, 0) sig2
+    ) (0, 0) items2
   in
   (* Do the pairing and checking, and return the final coercion *)
-  let paired, unpaired, subst = pair_components subst comps1 sig2 in
+  let paired, unpaired, subst = pair_components subst comps1 items2 in
   let d =
     signature_components ~in_eq ~loc ~mark new_env subst mod_shape
       Shape.Map.empty
@@ -697,6 +699,23 @@ and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
           missings;
           incompatibles;
         }
+
+and signatures ~in_eq ~loc env ~mark subst sig1 sig2 mod_shape =
+  if rl_debugging then (
+    Format.printf "@[<hv 2>signatures@ %a@ %a@]@."
+      Printtyp.modtype (Mty_signature sig1)
+      Printtyp.modtype (Mty_signature sig2);
+  );
+  let items1 = Mtype.unfold_signature env Subst.identity ~aliasable:true sig1
+  in
+  let items2 = Mtype.unfold_signature env subst ~aliasable:false sig2
+  in
+  if rl_debugging then (
+    Format.printf "@[<hv 2>comparing@ %a@ %a@]@."
+      Printtyp.modtype (Mty_signature (Signature.pack items1))
+      Printtyp.modtype (Mty_signature (Signature.pack items2));
+  );
+  signature_items ~in_eq ~loc env ~mark subst items1 items2 mod_shape
 
 (* Inclusion between signature components *)
 and signature_components :
@@ -885,9 +904,11 @@ and check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2 =
   | Error less_than, Some Error greater_than ->
       Error Error.(Incomparable {less_than; greater_than})
 
-let include_functor_signatures ~loc env ~mark subst sig1 sig2 mod_shape =
-  let _, _, comps1 = build_component_table (fun _pos name -> name) sig1 in
-  let paired, unpaired, subst = pair_components subst comps1 sig2 in
+let include_functor_signatures ~loc env ~mark sig1 sig2 mod_shape =
+  let items1 = Mtype.unfold_signature env Subst.identity ~aliasable:true sig1 in
+  let items2 = Mtype.unfold_signature env Subst.identity ~aliasable:true sig2 in
+  let _, _, comps1 = build_component_table (fun _pos name -> name) items1 in
+  let paired, unpaired, subst = pair_components Subst.identity comps1 items2 in
   let d = signature_components ~in_eq:false ~loc ~mark env subst mod_shape
             Shape.Map.empty
             (List.rev paired)
@@ -958,6 +979,11 @@ let () =
    interface. *)
 
 let compunit env ~mark impl_name impl_sig intf_name intf_sig unit_shape =
+  if rl_debugging then (
+    Format.printf "@[<hv 2>compunit@ %a@ %a@]@."
+      Printtyp.modtype (Mty_signature impl_sig)
+      Printtyp.modtype (Mty_signature intf_sig)
+  );
   match
     signatures ~in_eq:false ~loc:(Location.in_file impl_name) env ~mark
       Subst.identity impl_sig intf_sig unit_shape
@@ -1208,7 +1234,7 @@ let signatures env ~mark sig1 sig2 =
 
 let include_functor_signatures env ~mark sig1 sig2 =
   match include_functor_signatures ~loc:Location.none env ~mark
-          Subst.identity sig1 sig2 Shape.dummy_mod
+          sig1 sig2 Shape.dummy_mod
   with
   | Ok cc -> cc
   | Error reason -> raise (Error(env,Error.(In_Include_functor_signature reason)))

@@ -468,7 +468,7 @@ module Lazy_types = struct
 
   and signature' =
     | S_eager of Types.signature
-    | S_lazy of signature_item list
+    | S_lazy of Types.Signature.nominal option * signature_item list
 
   and signature =
     (scoping * t * signature', signature') Lazy_backtrack.t
@@ -490,6 +490,13 @@ module Lazy_types = struct
 
 end
 open Lazy_types
+
+let rename_nominal s (p, cs) =
+  let rename_constr = function
+    | Sig_with_module (p,q) -> Sig_with_module (p, module_path s q)
+    | Sig_with_type (p,q) -> Sig_with_type (p, type_path s q)
+  in
+  (modtype_path s p, List.map rename_constr cs)
 
 let rename_bound_idents scoping s sg =
   let rename =
@@ -644,24 +651,30 @@ and subst_lazy_signature scoping s sg =
      Lazy_backtrack.create (scoping, s, sg)
 
 and force_signature sg =
-  Types.Signature.pack (List.map force_signature_item (force_signature_once sg))
+  let (nom, items) = unfold_signature_once sg in
+  Types.Signature.pack_nominal nom (List.map force_signature_item items)
 
-and force_signature_once sg =
+and unfold_signature_once sg =
   lazy_signature' (Lazy_backtrack.force force_signature_once' sg)
 
+and force_signature_once sg =
+  snd (unfold_signature_once sg)
+
 and lazy_signature' = function
-  | S_lazy sg -> sg
-  | S_eager sg -> List.map lazy_signature_item (Types.Signature.unpack sg)
+  | S_lazy (nom, sg) -> (nom, sg)
+  | S_eager sg ->
+      (Types.Signature.get_nominal sg, List.map lazy_signature_item (Types.Signature.unpack sg))
 
 and force_signature_once' (scoping, s, sg) =
-  let sg = lazy_signature' sg in
+  let (nom, sg) = lazy_signature' sg in
   (* Components of signature may be mutually recursive (e.g. type declarations
      or class and type declarations), so first build global renaming
      substitution... *)
+  let nom' = Option.map (rename_nominal s) nom in
   let (sg', s') = rename_bound_idents scoping s sg in
   (* ... then apply it to each signature component in turn *)
   For_copy.with_scope (fun copy_scope ->
-    S_lazy (List.rev_map (subst_lazy_signature_item' copy_scope scoping s') sg')
+    S_lazy (nom', List.rev_map (subst_lazy_signature_item' copy_scope scoping s') sg')
   )
 
 and lazy_signature_item = function
@@ -724,6 +737,27 @@ and compose s1 s2 =
     loc = keep_latest_loc s1.loc s2.loc;
   }
 
+let add_nominal nom lsig =
+  let add_to = function
+    | S_eager sg -> S_eager (Types.Signature.add_nominal nom sg)
+    | S_lazy (None, sg) -> S_lazy (Some nom, sg)
+    | S_lazy _ as sg -> sg
+  in
+  match Lazy_backtrack.get_contents lsig with
+    | Left (scoping, s, sg) ->
+        Lazy_backtrack.create (scoping, s, add_to sg)
+    | Right sg -> Lazy_backtrack.create_forced (add_to sg)
+
+let add_withs constrs lsig =
+  let add_to = function
+  | S_eager sg -> S_eager (Types.Signature.add_withs constrs sg)
+  | S_lazy (Some (p, cs), sg) -> S_lazy (Some (p, cs @ constrs), sg)
+  | S_lazy _ as sg -> sg
+  in
+  match Lazy_backtrack.get_contents lsig with
+  | Left (scoping, s, sg) ->
+      Lazy_backtrack.create (scoping, s, add_to sg)
+  | Right sg -> Lazy_backtrack.create_forced (add_to sg)
 
 let subst_lazy_signature_item scoping s comp =
   For_copy.with_scope
@@ -736,8 +770,11 @@ module Lazy = struct
   let of_modtype = lazy_modtype
   let of_modtype_decl = lazy_modtype_decl
   let of_signature sg = Lazy_backtrack.create_forced (S_eager sg)
-  let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy sg)
+  let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy (None, sg))
   let of_signature_item = lazy_signature_item
+
+  let add_nominal = add_nominal
+  let add_withs = add_withs
 
   let module_decl = subst_lazy_module_decl
   let modtype = subst_lazy_modtype
@@ -750,6 +787,7 @@ module Lazy = struct
   let force_modtype_decl = force_modtype_decl
   let force_signature = force_signature
   let force_signature_once = force_signature_once
+  let unfold_signature_once = unfold_signature_once
   let force_signature_item = force_signature_item
 end
 

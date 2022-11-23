@@ -330,6 +330,10 @@ type visibility =
   | Hidden
 
 
+type signature_with =
+  | Sig_with_module of string list * Path.t
+  | Sig_with_type of string list * Path.t
+
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
@@ -344,7 +348,9 @@ and module_presence =
   | Mp_present
   | Mp_absent
 
-and signature = signature_item list
+and signature =
+  | Sig_anonymous of signature_item list
+  | Sig_named of Path.t * signature_with list * signature_item list
 
 and signature_item =
     Sig_value of Ident.t * value_description * visibility
@@ -383,25 +389,65 @@ and ext_status =
   | Text_exception                 (* an exception *)
 
 module Signature = struct
-  let unpack items = items
+  type nominal = Path.t * signature_with list
 
-  let pack items = items
+  let unpack = function
+    | Sig_anonymous items -> items
+    | Sig_named (_, _, items) -> items
 
-  let map = List.map
+  let pack items = Sig_anonymous items
 
-  let filter_map = List.filter_map
+  let map f sg = unpack sg |> List.map f |> pack
 
-  let iter = List.iter
+  let filter_map f sg = unpack sg |> List.filter_map f |> pack
 
-  let fold = List.fold_left
+  let iter f sg = unpack sg |> List.iter f
 
-  let exists = List.exists
+  let fold f z sg = unpack sg |> List.fold_left f z
 
-  let empty = []
+  let fold_map f z sg =
+    let r, items = unpack sg |> List.fold_left_map f z in
+    r, pack items
+
+
+  let exists f sg = unpack sg |> List.exists f
+
+  let empty = Sig_anonymous []
 
   let is_empty = function
-    | [] -> true
+    | Sig_anonymous [] | Sig_named (_, _, []) -> true
     | _ -> false
+
+  let pack_named p items = Sig_named (p, [], items)
+
+  let named p sg = unpack sg |> pack_named p
+
+  let add_withs new_cs = function
+    | Sig_anonymous _ as sg -> sg
+    | Sig_named (p, cs, items) -> Sig_named (p, cs @ new_cs, items)
+
+  let add_with constr = add_withs [constr]
+
+  let pack_nominal nom items = match nom with
+    | Some (p, cs) -> Sig_named (p, cs, items)
+    | None -> Sig_anonymous items
+
+  let add_nominal (p, constrs) = function
+    | Sig_anonymous items -> Sig_named (p, constrs, items)
+    | Sig_named _ as sg -> sg 
+
+  let drop_nominal sg = unpack sg |> pack
+
+  let get_nominal = function
+    | Sig_anonymous _ -> None
+    | Sig_named (p, constrs, _) -> Some (p, constrs)
+
+  let repack sg items = match sg with
+    | Sig_anonymous _ -> Sig_anonymous items
+    | Sig_named (p, constrs, _) -> Sig_named (p, constrs, items)
+
+  let update_opt f sg =
+    unpack sg |> f |> Option.map (fun (x,items) -> (x, repack sg items))
 end
 
 (* Constructor and record label descriptions inserted held in typing

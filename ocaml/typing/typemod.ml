@@ -23,6 +23,8 @@ open Format
 
 let () = Includemod_errorprinter.register ()
 
+let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+
 module Sig_component_kind = Shape.Sig_component_kind
 module String = Misc.Stdlib.String
 
@@ -101,7 +103,12 @@ let rec path_concat head p =
 
 let extract_sig env loc mty =
   match Env.scrape_alias env mty with
-    Mty_signature sg -> sg
+    Mty_signature sg ->
+        begin
+          match mty with
+          | Mty_ident p -> Signature.named p sg
+          | _ -> sg
+        end
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
   | _ -> raise(Error(loc, env, Signature_expected))
@@ -694,6 +701,12 @@ let merge_constraint initial_env loc sg lid constr =
         let mty = Mtype.scrape_for_type_of ~remove_aliases sig_env mty in
         let md'' = { md' with md_type = mty } in
         let newmd = Mtype.strengthen_decl ~aliasable:false sig_env md'' path in
+        if rl_debugging then (
+          Format.printf "@[<hv 2>merge@ %a@ %a@ %a@]@."
+            Printtyp.modtype md'.md_type
+            Printtyp.modtype mty
+            Printtyp.modtype newmd.md_type
+        );
         ignore(Includemod.modtypes  ~mark:Mark_both ~loc sig_env
                  newmd.md_type md.md_type);
         return
@@ -731,7 +744,12 @@ let merge_constraint initial_env loc sg lid constr =
     match
       Signature_group.replace_in_place (patch_item constr namelist env sg) sg
     with
-    | Some (x,sg) -> x, sg
+    | Some (x,sg) -> 
+        let sg = match constr with
+          | With_module wm ->
+              Signature.add_with (Sig_with_module (namelist, wm.path)) sg
+          | _ -> Signature.drop_nominal sg
+        in x, sg
     | None -> raise(Error(loc, env, With_no_component lid.txt))
   in
   try

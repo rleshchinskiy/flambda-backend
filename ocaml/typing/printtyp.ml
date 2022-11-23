@@ -28,6 +28,13 @@ open Outcometree
 module String = Misc.Stdlib.String
 module Int = Misc.Stdlib.Int
 
+let rl_print_uniques = Option.is_some (Sys.getenv_opt "RL_PRINT_UNIQUES")
+
+let rl_print_with =
+  match Sys.getenv_opt "RL_PRINT_WITH" with
+  | None -> Option.is_some (Sys.getenv_opt "RL_WITH")
+  | Some s -> not (String.equal s "0")
+
 (* Print a long identifier *)
 
 let rec longident ppf = function
@@ -291,12 +298,14 @@ let env_ident namespace name =
   | _ -> None
   | exception Not_found -> None
 
+let rl_ident_name = if rl_print_uniques then Ident.unique_name else  Ident.name
+
 (** Associate a name to the identifier [id] within [namespace] *)
 let ident_name_simple namespace id =
   if not !enabled || fuzzy_id namespace id then
-    Out_name.create (Ident.name id)
+    Out_name.create (rl_ident_name id)
   else
-  let name = Ident.name id in
+  let name = rl_ident_name id in
   match M.find name (get namespace) with
   | Uniquely_associated_to (id',r) when Ident.same id id' ->
       r
@@ -1845,8 +1854,24 @@ let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_ident p ->
       Omty_ident (tree_of_path Module_type p)
   | Mty_signature sg ->
-      Omty_signature (if ellipsis then [Osig_ellipsis]
-                      else tree_of_signature sg)
+      (* RL NOTE: Generating this seems to mess up identifiers in the output
+         (specifically, some tests no longer pass) so let's only generate this
+         conditionally for now. *)
+      let nominal = if rl_print_with
+        then 
+        let constr = function
+              | Sig_with_module (p,q) ->
+                  OmtyWith_module (String.concat "." p, tree_of_path Module q)
+              | Sig_with_type (p,q) ->
+                  OmtyWith_type (String.concat "." p, tree_of_path Type q)
+        in
+        Signature.get_nominal sg |> Option.map
+          (fun (p, cs) -> (tree_of_path Module_type p, List.map constr cs))
+        else
+          None
+      in
+      let tree = if ellipsis then [Osig_ellipsis] else tree_of_signature sg in
+      Omty_signature (nominal, tree)
   | Mty_functor(param, ty_res) ->
       let param, env =
         tree_of_functor_parameter param
