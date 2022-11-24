@@ -329,11 +329,21 @@ type visibility =
   | Exported
   | Hidden
 
+type aliasability =
+  | Aliasable
+  | NotAliasable
+
+type nominal_with =
+  | Nom_with_module of string list * Path.t * aliasability
+  | Nom_with_type of string list * Path.t
+
 type module_type =
-    Mty_ident of Path.t
+    Mty_ident of Path.t * nominal
   | Mty_signature of signature
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
+
+and nominal = nominal_with list * signature
 
 and functor_parameter =
   | Unit
@@ -381,6 +391,23 @@ and ext_status =
   | Text_next                      (* not first constructor of an extension *)
   | Text_exception                 (* an exception *)
 
+
+module Nominal = struct
+  let empty = ([], [])
+  let is_empty = function
+    | ([], _) -> true
+    | _ -> false
+
+  let constraints (cs,_) = cs
+  let signature = function
+    | ([], _) -> None
+    | (_, sg) -> Some sg
+  
+  let add nom c f = (constraints nom @ [c], f (signature nom))
+
+  let make cs sg = (cs,sg)
+end
+  
 
 (* Constructor and record label descriptions inserted held in typing
    environments *)

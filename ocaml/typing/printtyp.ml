@@ -28,6 +28,11 @@ open Outcometree
 module String = Misc.Stdlib.String
 module Int = Misc.Stdlib.Int
 
+let rl_print_with =
+  match Sys.getenv_opt "RL_PRINT_WITH" with
+  | None -> Option.is_some (Sys.getenv_opt "RL_WITH")
+  | Some s -> not (String.equal s "0")
+
 (* Print a long identifier *)
 
 let rec longident ppf = function
@@ -1885,8 +1890,23 @@ let add_sigitem env x =
   Env.add_signature (Signature_group.flatten x) env
 
 let rec tree_of_modtype ?(ellipsis=false) = function
-  | Mty_ident p ->
-      Omty_ident (tree_of_path Module_type p)
+  | Mty_ident (p, nom) ->
+      let nom = match Types.Nominal.signature nom with
+        | Some sg when rl_print_with ->
+            let mk_with = function
+              | Types.Nom_with_module (ns, p, a) ->
+                  let aliasable = match a with
+                  | Aliasable -> true
+                  | NotAliasable -> false
+                  in
+                  Onom_with_module (String.concat "." ns, tree_of_path Module p, aliasable)
+              | Types.Nom_with_type (ns, p) ->
+                  Onom_with_type (String.concat "." ns, tree_of_path Type p)
+              in
+            Some (List.map mk_with (Types.Nominal.constraints nom), tree_of_signature sg)
+        | _ -> None
+      in
+      Omty_ident (tree_of_path Module_type p, nom)
   | Mty_signature sg ->
       Omty_signature (if ellipsis then [Osig_ellipsis]
                       else tree_of_signature sg)

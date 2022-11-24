@@ -612,7 +612,36 @@ and print_out_functor ppf t =
 and print_simple_out_module_type ppf =
   function
     Omty_abstract -> ()
-  | Omty_ident id -> fprintf ppf "%a" print_ident id
+  | Omty_ident (id, nom) ->
+      let print_sig ppf sg = match sg with
+        | [] -> fprintf ppf "sig end"
+        | sg ->
+           fprintf ppf "@[<hv 2>sig@ %a@;<1 -2>end@]" print_out_signature sg
+      in
+      begin match nom with
+      | Some (constrs, sg)  ->
+         let rec print_constrs sep ppf = function
+           | [] -> ()
+           | Onom_with_module (l,r,a) :: constrs ->
+              let eq = if a then "@=" else "=" in
+              fprintf ppf "@ %s module %s %s %a%a"
+                sep
+                l
+                eq
+                print_ident r
+                (print_constrs "and") constrs
+           | Onom_with_type (l,r) :: constrs ->
+              fprintf ppf "@ %s type %s = %a%a"
+                sep
+                l
+                print_ident r
+                (print_constrs "and") constrs
+         in
+         fprintf ppf "@[<hv 2>%a%a@ ==>@ %a@;<1 -2>@]"
+          print_ident id (print_constrs "with") constrs
+          print_sig sg
+       | _ -> fprintf ppf "%a" print_ident id
+      end
   | Omty_signature sg ->
      begin match sg with
        | [] -> fprintf ppf "sig end"

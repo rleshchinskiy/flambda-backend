@@ -738,8 +738,8 @@ let rec normalize_package_path env p =
     with Not_found -> None
   in
   match t with
-  | Some (Mty_ident p) -> normalize_package_path env p
-  | Some (Mty_signature _ | Mty_functor _ | Mty_alias _) | None ->
+  | Some (Mty_ident (p, nom)) when Types.Nominal.is_empty nom -> normalize_package_path env p
+  | Some (Mty_ident _) | Some (Mty_signature _ | Mty_functor _ | Mty_alias _) | None ->
       match p with
         Path.Pdot (p1, s) ->
           (* For module aliases *)
@@ -2644,8 +2644,8 @@ let complete_type_list ?(allow_absent=false) env fl1 lv2 mty2 fl2 =
 
 (* raise Not_found rather than Unify if the module types are incompatible *)
 let unify_package env unify_list lv1 p1 fl1 lv2 p2 fl2 =
-  let ntl2 = complete_type_list env fl1 lv2 (Mty_ident p2) fl2
-  and ntl1 = complete_type_list env fl2 lv1 (Mty_ident p1) fl1 in
+  let ntl2 = complete_type_list env fl1 lv2 (Mty_ident (p2, Types.Nominal.empty)) fl2
+  and ntl1 = complete_type_list env fl2 lv1 (Mty_ident (p1, Types.Nominal.empty)) fl1 in
   unify_list (List.map snd ntl1) (List.map snd ntl2);
   if eq_package_path env p1 p2
   || !package_subtype env p1 fl1 p2 fl2
@@ -5063,9 +5063,9 @@ let rec subtype_rec env trace t1 t2 cstrs =
     | (Tpackage (p1, fl1), Tpackage (p2, fl2)) ->
         begin try
           let ntl1 =
-            complete_type_list env fl2 (get_level t1) (Mty_ident p1) fl1
+            complete_type_list env fl2 (get_level t1) (Mty_ident (p1, Types.Nominal.empty)) fl1
           and ntl2 =
-            complete_type_list env fl1 (get_level t2) (Mty_ident p2) fl2
+            complete_type_list env fl1 (get_level t2) (Mty_ident (p2, Types.Nominal.empty)) fl2
               ~allow_absent:true in
           let cstrs' =
             List.map

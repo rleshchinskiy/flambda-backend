@@ -377,7 +377,15 @@ let type_iterators =
     | Unit -> ()
     | Named (_, mt) -> it.it_module_type it mt
   and it_module_type it = function
-      Mty_ident p
+      Mty_ident (p, nom) ->
+        it.it_path p;
+        List.iter
+          (function
+            | Nom_with_module (_, p, _) -> it.it_path p
+            | Nom_with_type (_, p) -> it.it_path p
+          )
+          (Nominal.constraints nom);
+        Option.iter (it.it_signature it) (Nominal.signature nom)
     | Mty_alias p -> it.it_path p
     | Mty_signature sg -> it.it_signature it sg
     | Mty_functor (p, mt) ->

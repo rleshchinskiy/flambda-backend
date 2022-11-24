@@ -99,10 +99,12 @@ module Lazy : sig
     }
 
   and modtype =
-    | MtyL_ident of Path.t
+    | MtyL_ident of Path.t * nominal
     | MtyL_signature of signature
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
+
+  and nominal
 
   and modtype_declaration =
     {
@@ -128,6 +130,13 @@ module Lazy : sig
   and functor_parameter =
     | Unit
     | Named of Ident.t option * modtype
+
+  module Nominal : sig
+    val empty : nominal
+    val is_empty : nominal -> bool
+    val signature : nominal -> signature option
+    val add : nominal -> nominal_with list -> signature -> nominal
+  end
 
 
   val of_module_decl : Types.module_declaration -> module_decl

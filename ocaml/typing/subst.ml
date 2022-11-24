@@ -97,8 +97,10 @@ let rec module_path s path =
 
 let modtype_path s path =
       match Path.Map.find path s.modtypes with
-      | Mty_ident p -> p
-      | Mty_alias _ | Mty_signature _ | Mty_functor _ ->
+      | Mty_ident (p, nom) when Nominal.is_empty nom -> p
+      | Mty_ident _ ->
+        fatal_error "Subst.modtype_path(Mty_ident)"
+     | Mty_alias _ | Mty_signature _ | Mty_functor _ ->
          fatal_error "Subst.modtype_path"
       | exception Not_found ->
          match path with
@@ -453,10 +455,12 @@ module Lazy_types = struct
     }
 
   and modtype =
-    | MtyL_ident of Path.t
+    | MtyL_ident of Path.t * nominal
     | MtyL_signature of signature
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
+
+  and nominal = nominal_with list * signature option
 
   and modtype_declaration =
     {
@@ -516,7 +520,7 @@ let rename_bound_idents scoping s sg =
     | SigL_modtype(id, mtd, vis) :: rest ->
         let id' = rename id in
         rename_bound_idents
-          (add_modtype id (Mty_ident(Pident id')) s)
+          (add_modtype id (Mty_ident(Pident id', Nominal.empty)) s)
           (SigL_modtype(id', mtd, vis) :: sg)
           rest
     | SigL_class(id, cd, rs, vis) :: rest ->
@@ -563,8 +567,25 @@ and force_module_decl md =
     md_loc = md.mdl_loc;
     md_uid = md.mdl_uid }
 
+and lazy_nominal nom =
+  match Nominal.signature nom with
+  | None -> ([], None)
+  | Some sg -> (Nominal.constraints nom, Some (Lazy_backtrack.create_forced (S_eager sg)))
+
+and force_nominal (cs,sg) =
+  match sg with
+  | None -> Nominal.empty
+  | Some sg -> Nominal.make cs (force_signature sg)
+
+and subst_lazy_nominal scoping s (cs, sg) =
+  let rename_with = function
+    | Nom_with_module (p,q,a) -> Nom_with_module (p, module_path s q, a)
+    | Nom_with_type (p,q) -> Nom_with_type (p, type_path s q)
+  in
+  (List.map rename_with cs, Option.map (subst_lazy_signature scoping s) sg)
+
 and lazy_modtype = function
-  | Mty_ident p -> MtyL_ident p
+  | Mty_ident (p, nom) -> MtyL_ident (p, lazy_nominal nom)
   | Mty_signature sg ->
      MtyL_signature (Lazy_backtrack.create_forced (S_eager sg))
   | Mty_functor (Unit, mty) -> MtyL_functor (Unit, lazy_modtype mty)
@@ -573,14 +594,21 @@ and lazy_modtype = function
   | Mty_alias p -> MtyL_alias p
 
 and subst_lazy_modtype scoping s = function
-  | MtyL_ident p ->
+  | MtyL_ident (p, nom) ->
+      let nom = subst_lazy_nominal scoping s nom in
       begin match Path.Map.find p s.modtypes with
-       | mty -> lazy_modtype mty
+       | mty ->
+          begin match nom, mty with
+          | (_, None), mty -> lazy_modtype mty
+          | (cs, Some sg), Mty_ident (q, qnom) ->
+              MtyL_ident (q, (Nominal.constraints qnom @ cs, Some sg))
+          | _, _ -> assert false
+          end
        | exception Not_found ->
           begin match p with
-          | Pident _ -> MtyL_ident p
+          | Pident _ -> MtyL_ident (p, nom)
           | Pdot(p, n) ->
-             MtyL_ident(Pdot(module_path s p, n))
+             MtyL_ident(Pdot(module_path s p, n), nom)
           | Papply _ ->
              fatal_error "Subst.modtype"
           end
@@ -600,7 +628,7 @@ and subst_lazy_modtype scoping s = function
       MtyL_alias (module_path s p)
 
 and force_modtype = function
-  | MtyL_ident p -> Mty_ident p
+  | MtyL_ident (p, nom) -> Mty_ident (p, force_nominal nom)
   | MtyL_signature sg -> Mty_signature (force_signature sg)
   | MtyL_functor (param, res) ->
      let param : Types.functor_parameter =
@@ -731,6 +759,16 @@ let subst_lazy_signature_item scoping s comp =
 
 module Lazy = struct
   include Lazy_types
+
+  module Nominal = struct
+    let empty = ([], None)
+
+    let is_empty (_, sg) = Option.is_none sg
+
+    let signature (_,sg) = sg
+
+    let add (cs, _) ds sg = (cs @ ds, Some sg)
+  end
 
   let of_module_decl = lazy_module_decl
   let of_modtype = lazy_modtype

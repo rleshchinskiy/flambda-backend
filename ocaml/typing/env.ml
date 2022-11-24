@@ -1449,7 +1449,7 @@ let rec normalize_modtype_path env path =
 
 and expand_modtype_path env path =
   match (find_modtype_lazy path env).mtdl_type with
-  | Some (MtyL_ident path) -> normalize_modtype_path env path
+  | Some (MtyL_ident (path, nom)) when Subst.Lazy.Nominal.is_empty nom -> normalize_modtype_path env path
   | _ | exception Not_found -> path
 
 let find_module path env =
@@ -1658,7 +1658,8 @@ let find_shadowed_types path env =
 let rec scrape_alias env ?path mty =
   let open Subst.Lazy in
   match mty, path with
-    MtyL_ident p, _ ->
+    MtyL_ident (p, nom), _ when Subst.Lazy.Nominal.is_empty nom ->
+      (* RL: FIXME *)
       begin try
         scrape_alias env (find_modtype_expansion_lazy p env) ?path
       with Not_found ->
@@ -1711,7 +1712,7 @@ let prefix_idents root prefixing_sub sg =
       let p = Pdot(root, Ident.name id) in
       prefix_idents root
         ((SigL_modtype(id, mtd, vis), p) :: items_and_paths)
-        (Subst.add_modtype id (Mty_ident p) prefixing_sub)
+        (Subst.add_modtype id (Mty_ident (p, Types.Nominal.empty)) prefixing_sub)
         rem
     | SigL_class(id, cd, rs, vis) :: rem ->
       (* pretend this is a type, cf. PR#6650 *)

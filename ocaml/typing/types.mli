@@ -598,11 +598,21 @@ type visibility =
   | Exported
   | Hidden
 
+type aliasability =
+  | Aliasable
+  | NotAliasable
+
+type nominal_with =
+  | Nom_with_module of string list * Path.t * aliasability
+  | Nom_with_type of string list * Path.t
+
 type module_type =
-    Mty_ident of Path.t
+    Mty_ident of Path.t * nominal
   | Mty_signature of signature
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
+
+and nominal
 
 and functor_parameter =
   | Unit
@@ -649,6 +659,16 @@ and ext_status =
     Text_first                     (* first constructor in an extension *)
   | Text_next                      (* not first constructor in an extension *)
   | Text_exception
+
+module Nominal : sig
+  val empty : nominal
+  val is_empty : nominal -> bool
+  val constraints : nominal -> nominal_with list
+  val signature : nominal -> signature option
+  val add : nominal -> nominal_with -> (signature option -> signature) -> nominal
+
+  val make : nominal_with list -> signature -> nominal
+end
 
 val item_visibility : signature_item -> visibility
 

@@ -371,7 +371,7 @@ let pair_components subst sig1_comps sig2 =
           | Sig_module _ ->
               Subst.add_module id2 (Path.Pident id1) subst
           | Sig_modtype _ ->
-              Subst.add_modtype id2 (Mty_ident (Path.Pident id1)) subst
+              Subst.add_modtype id2 (Mty_ident (Path.Pident id1, Nominal.empty)) subst
           | Sig_value _ | Sig_typext _
           | Sig_class _ | Sig_class_type _ ->
               subst
@@ -392,10 +392,13 @@ let pair_components subst sig1_comps sig2 =
 let retrieve_functor_params env mty =
   let rec retrieve_functor_params before env =
     function
-    | Mty_ident p as res ->
-        begin match expand_modtype_path env p with
-        | Some mty -> retrieve_functor_params before env mty
-        | None -> List.rev before, res
+    | Mty_ident (p, nom) as res ->
+        begin match Nominal.signature nom with
+        | Some _ -> List.rev before, res
+        | None -> begin match expand_modtype_path env p with
+          | Some mty -> retrieve_functor_params before env mty
+          | None -> List.rev before, res
+          end
         end
     | Mty_alias p as res ->
         begin match expand_module_alias ~strengthen:false env p with
@@ -500,7 +503,17 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
               | Error reason -> Error (Error.After_alias_expansion reason)
           end
     end
-  | (Mty_ident p1, Mty_ident p2) ->
+  | (Mty_ident (_,nom1), _) when not (Nominal.is_empty nom1) ->
+      begin match Nominal.signature nom1 with
+      | Some sg -> try_modtypes ~in_eq ~loc env ~mark subst (Mty_signature sg) mty2 orig_shape
+      | None -> assert false
+      end
+  | (_, Mty_ident (_,nom2)) when not (Nominal.is_empty nom2) ->
+      begin match Nominal.signature nom2 with
+      | Some sg -> try_modtypes ~in_eq ~loc env ~mark subst mty1 (Mty_signature sg) orig_shape
+      | None -> assert false
+      end
+  | (Mty_ident (p1,_), Mty_ident (p2,_)) ->
       let p1 = Env.normalize_modtype_path env p1 in
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       if Path.same p1 p2 then Ok (Tcoerce_none, orig_shape)
@@ -510,14 +523,14 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
             try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
         | None, _  | _, None -> Error (Error.Mt_core Abstract_module_type)
         end
-  | (Mty_ident p1, _) ->
+  | (Mty_ident (p1,_), _) ->
       let p1 = Env.normalize_modtype_path env p1 in
       begin match expand_modtype_path env p1 with
       | Some p1 ->
           try_modtypes ~in_eq ~loc env ~mark subst p1 mty2 orig_shape
       | None -> Error (Error.Mt_core Abstract_module_type)
       end
-  | (_, Mty_ident p2) ->
+  | (_, Mty_ident (p2,_)) ->
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       begin match expand_modtype_path env p2 with
       | Some p2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 p2 orig_shape
@@ -633,7 +646,9 @@ and functor_param ~in_eq ~loc env ~mark subst param1 param2 =
 and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
     subst mty1 path1 mty2 shape =
   match mty1, mty2 with
-  | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
+  | Mty_ident (p1,nom1), Mty_ident (p2,nom2)
+      when equal_modtype_paths env p1 subst p2
+        && Nominal.is_empty nom1 && Nominal.is_empty nom2 ->
       Ok (Tcoerce_none, shape)
   | _, _ ->
       let mty1 = Mtype.strengthen ~aliasable env mty1 path1 in
@@ -642,7 +657,9 @@ and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
 and strengthened_module_decl ~loc ~aliasable env ~mark
     subst md1 path1 md2 shape =
   match md1.md_type, md2.md_type with
-  | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
+  | Mty_ident (p1,nom1), Mty_ident (p2,nom2)
+      when equal_modtype_paths env p1 subst p2
+        && Nominal.is_empty nom1 && Nominal.is_empty nom2 ->
       Ok (Tcoerce_none, shape)
   | _, _ ->
       let md1 = Mtype.strengthen_decl ~aliasable env md1 path1 in
@@ -851,7 +868,7 @@ and modtype_infos ~in_eq ~loc env ~mark subst id info1 info2 =
     | (Some mty1, Some mty2) ->
         check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2
     | (None, Some mty2) ->
-        let mty1 = Mty_ident(Path.Pident id) in
+        let mty1 = Mty_ident(Path.Pident id, Nominal.empty) in
         check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2 in
   match r with
   | Ok _ as ok -> ok

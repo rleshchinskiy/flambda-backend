@@ -837,7 +837,7 @@ let rec approx_modtype env smty =
       let path =
         Env.lookup_modtype_path ~use:false ~loc:smty.pmty_loc lid.txt env
       in
-      Mty_ident path
+      Mty_ident (path, Nominal.empty)
   | Pmty_alias lid ->
       let path =
         Env.lookup_module_path ~use:false ~load:false
@@ -1370,7 +1370,7 @@ and transl_modtype_aux env smty =
   match smty.pmty_desc with
     Pmty_ident lid ->
       let path = transl_modtype_longident loc env lid.txt in
-      mkmty (Tmty_ident (path, lid)) (Mty_ident path) env loc
+      mkmty (Tmty_ident (path, lid)) (Mty_ident (path, Nominal.empty)) env loc
         smty.pmty_attributes
   | Pmty_alias lid ->
       let path = transl_module_alias loc env lid.txt in
@@ -2133,14 +2133,18 @@ and package_constraints env loc mty constrs =
     | Mty_signature sg ->
         Mty_signature (package_constraints_sig env loc sg constrs)
     | Mty_functor _ | Mty_alias _ -> assert false
-    | Mty_ident p -> raise(Error(loc, env, Cannot_scrape_package_type p))
+    | Mty_ident (p,nom) ->
+      begin match Nominal.signature nom with
+      | Some sg -> Mty_signature (package_constraints_sig env loc sg constrs)
+      | None -> raise(Error(loc, env, Cannot_scrape_package_type p))
+      end
   end
 
 let modtype_of_package env loc p fl =
   (* We call Ctype.correct_levels to ensure that the types being added to the
      module type are at generic_level. *)
   let mty =
-    package_constraints env loc (Mty_ident p)
+    package_constraints env loc (Mty_ident (p, Nominal.empty))
       (List.map (fun (n, t) -> Longident.flatten n, Ctype.correct_levels t) fl)
   in
   Subst.modtype Keep Subst.identity mty
@@ -3084,7 +3088,7 @@ let type_package env m p fl =
   (* go back to original level *)
   Ctype.end_def ();
   let mty =
-    if fl = [] then (Mty_ident p)
+    if fl = [] then (Mty_ident (p, Nominal.empty))
     else modtype_of_package env modl.mod_loc p fl'
   in
   List.iter
