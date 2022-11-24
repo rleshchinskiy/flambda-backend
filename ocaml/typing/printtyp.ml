@@ -1891,7 +1891,8 @@ let add_sigitem env x =
 
 let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_ident (p, nom) ->
-      let nom = match Types.Nominal.signature nom with
+      let mk_ident nom = Omty_ident (tree_of_path Module_type p, nom) in
+      begin match Types.Nominal.signature nom with
         | Some sg when rl_print_with ->
             let mk_with = function
               | Types.Nom_with_module (ns, p, a) ->
@@ -1903,10 +1904,12 @@ let rec tree_of_modtype ?(ellipsis=false) = function
               | Types.Nom_with_type (ns, p) ->
                   Onom_with_type (String.concat "." ns, tree_of_path Type p)
               in
-            Some (List.map mk_with (Types.Nominal.constraints nom), tree_of_signature sg)
-        | _ -> None
-      in
-      Omty_ident (tree_of_path Module_type p, nom)
+            (mk_ident (Some (List.map mk_with (Types.Nominal.constraints nom), tree_of_signature sg)))
+        | Some sg ->
+            (Omty_signature (if ellipsis then [Osig_ellipsis]
+                      else tree_of_signature sg))
+        | _ -> mk_ident None
+      end
   | Mty_signature sg ->
       Omty_signature (if ellipsis then [Osig_ellipsis]
                       else tree_of_signature sg)
