@@ -72,7 +72,6 @@ let rec strengthen_lazy ~aliasable env mty p =
 
 and strengthen_lazy_sig' ~aliasable env sg p =
   let open Subst.Lazy in
-  (*
   let add_with w = Option.map (fun ws -> w :: ws) in
   let strengthen_item (env, withs) = function
     | SigL_value(_, _, _) as sigelt ->
@@ -130,64 +129,11 @@ and strengthen_lazy_sig' ~aliasable env sg p =
   in
   let ((_, withs), items) = List.fold_left_map strengthen_item (env, Some []) sg in
   (Option.map List.rev withs, List.filter_map Fun.id items)
-  *)
-  match sg with
-    [] -> []
-  | (SigL_value(_, _, _) as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
-  | SigL_type(id, {type_kind=Type_abstract}, _, _) :: rem
-    when Btype.is_row_name (Ident.name id) ->
-      strengthen_lazy_sig' ~aliasable env rem p
-  | SigL_type(id, decl, rs, vis) :: rem ->
-      let newdecl =
-        match decl.type_manifest, decl.type_private, decl.type_kind with
-          Some _, Public, _ -> decl
-        | Some _, Private, (Type_record _ | Type_variant _) -> decl
-        | _ ->
-            let manif =
-              Some(Btype.newgenty(Tconstr(Pdot(p, Ident.name id),
-                                          decl.type_params, ref Mnil))) in
-            if decl.type_kind = Type_abstract then
-              { decl with type_private = Public; type_manifest = manif }
-            else
-              { decl with type_manifest = manif }
-      in
-      SigL_type(id, newdecl, rs, vis) ::
-        strengthen_lazy_sig' ~aliasable env rem p
-  | (SigL_typext _ as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
-  | SigL_module(id, pres, md, rs, vis) :: rem ->
-      let str =
-        strengthen_lazy_decl ~aliasable env md (Pdot(p, Ident.name id))
-      in
-      let env =
-        Env.add_module_declaration_lazy ~update_summary:false id pres md env in
-      SigL_module(id, pres, str, rs, vis)
-      :: strengthen_lazy_sig' ~aliasable env rem p
-      (* Need to add the module in case it defines manifest module types *)
-  | SigL_modtype(id, decl, vis) :: rem ->
-      let newdecl =
-        match decl.mtdl_type with
-        | Some _ when not aliasable ->
-            (* [not alisable] condition needed because of recursive modules.
-               See [Typemod.check_recmodule_inclusion]. *)
-            decl
-        | _ ->
-            {decl with mtdl_type = Some(MtyL_ident(Pdot(p,Ident.name id), Subst.Lazy.Nominal.empty))}
-      in
-      let env = Env.add_modtype_lazy ~update_summary:false id decl env in
-      SigL_modtype(id, newdecl, vis) ::
-      strengthen_lazy_sig' ~aliasable env rem p
-      (* Need to add the module type in case it is manifest *)
-  | (SigL_class _ as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
-  | (SigL_class_type _ as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
 
 and strengthen_lazy_sig ~aliasable env sg p =
   let sg = Subst.Lazy.force_signature_once sg in
-  let (* withs, *) sg = strengthen_lazy_sig' ~aliasable env sg p in
-  (* withs, *) None,  Subst.Lazy.of_signature_items sg
+  let withs, sg = strengthen_lazy_sig' ~aliasable env sg p in
+  withs, Subst.Lazy.of_signature_items sg
 
 and strengthen_lazy_decl ~aliasable env md p =
   let open Subst.Lazy in
