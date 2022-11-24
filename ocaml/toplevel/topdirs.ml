@@ -359,7 +359,7 @@ let parse_warnings ppf iserr s =
 
 (* Typing information *)
 
-let trim_signature = function
+let rec trim_signature = function
     Mty_signature sg ->
       Mty_signature
         (List.map
@@ -377,6 +377,11 @@ let trim_signature = function
                  Sig_modtype (id, Modtype_manifest (trim_modtype mty))*)
              | item -> item)
            sg)
+  | Mty_ident (_,nom) as mty ->
+    begin match Nominal.signature nom with
+    | Some sg -> trim_signature (Mty_signature sg)
+    | None -> mty
+    end
   | mty -> mty
 
 let show_prim to_sig ppf lid =

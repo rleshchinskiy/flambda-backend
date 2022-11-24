@@ -103,6 +103,11 @@ let extract_sig env loc mty =
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
+  | Mty_ident (_,nom) ->
+      begin match Nominal.signature nom with
+      | Some sg -> sg
+      | None -> raise(Error(loc, env, Signature_expected))
+      end
   | _ -> raise(Error(loc, env, Signature_expected))
 
 let extract_sig_open env loc mty =
@@ -110,6 +115,11 @@ let extract_sig_open env loc mty =
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
+  | Mty_ident (_,nom) as mty ->
+      begin match Nominal.signature nom with
+      | Some sg -> sg
+      | None -> raise(Error(loc, env, Structure_expected mty))
+      end
   | mty -> raise(Error(loc, env, Structure_expected mty))
 
 (* Extract the signature of a functor's body, using the provided [sig_acc]
@@ -121,6 +131,11 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
       let sg_param =
         match Mtype.scrape env mty_param with
         | Mty_signature sg_param -> sg_param
+        | Mty_ident (_,nom) ->
+          begin match Nominal.signature nom with
+          | Some sg -> sg
+          | None -> raise(Error(loc, env, Signature_parameter_expected mty_func))
+          end
         | _ -> raise (Error (loc,env,Signature_parameter_expected mty_func))
       in
       let coercion =
@@ -156,6 +171,11 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
             | Mty_signature sg_result -> Tincl_gen_functor coercion, sg_result
             | sg -> raise (Error (loc,env,Signature_result_expected
                                             (Mty_functor (Unit,sg))))
+          end
+        | Mty_ident (_,nom) as sg ->
+          begin match Nominal.signature nom with
+          | Some sg_result -> Tincl_functor coercion, sg_result
+          | None -> raise (Error (loc,env,Signature_result_expected sg))
           end
         | sg -> raise (Error (loc,env,Signature_result_expected sg))
       in
@@ -708,15 +728,18 @@ let merge_constraint initial_env loc sg lid constr =
       when Ident.name id = s ->
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
         let sg = extract_sig sig_env loc md.md_type in
-        let ((path, _, tcstr), newsg) = merge_signature sig_env sg namelist in
+        let ((path, _, tcstr), nom, newsg) = merge_signature sig_env sg namelist in
         let path = path_concat id path in
         real_ids := path :: !real_ids;
         let item =
-          match md.md_type, constr with
-            Mty_alias _, (With_module _ | With_type _) ->
+          match md.md_type, constr, nom with
+            Mty_alias _, (With_module _ | With_type _), _ ->
               (* A module alias cannot be refined, so keep it
                  and just check that the constraint is correct *)
               item
+          | Mty_ident (p,nom), _, Some c ->
+              let newmd = {md with md_type = Mty_ident (p, Nominal.add nom [c] newsg )} in
+              Sig_module(id, Mp_present, newmd, rs, priv)
           | _ ->
               let newmd = {md with md_type = Mty_signature newsg} in
               Sig_module(id, Mp_present, newmd, rs, priv)
@@ -727,12 +750,17 @@ let merge_constraint initial_env loc sg lid constr =
     match
       Signature_group.replace_in_place (patch_item constr namelist env sg) sg
     with
-    | Some (x,sg) -> x, sg
+    | Some (x,sg) ->
+        let nom = match constr with
+        | With_module wm -> Some (Nom_with_module (namelist, wm.path, NotAliasable))
+        | _ -> None
+        in
+        x, nom, sg
     | None -> raise(Error(loc, env, With_no_component lid.txt))
   in
   try
     let names = Longident.flatten lid.txt in
-    let (tcstr, sg) = merge_signature initial_env sg names in
+    let (tcstr, nom, sg) = merge_signature initial_env sg names in
     if destructive_substitution then
       check_usage_after_substitution ~loc ~lid initial_env !real_ids
         !unpackable_modtype sg;
@@ -787,7 +815,7 @@ let merge_constraint initial_env loc sg lid constr =
     in
     check_well_formed_module initial_env loc "this instantiated signature"
       (Mty_signature sg);
-    (tcstr, sg)
+    (tcstr, nom, sg)
   with Includemod.Error explanation ->
     raise(Error(loc, initial_env, With_mismatch(lid.txt, explanation)))
 
@@ -1414,12 +1442,17 @@ and transl_modtype_aux env smty =
       let body = transl_modtype env sbody in
       let init_sg = extract_sig env sbody.pmty_loc body.mty_type in
       let remove_aliases = has_remove_aliases_attribute smty.pmty_attributes in
-      let (rev_tcstrs, final_sg) =
+      let (rev_tcstrs, rev_withs, final_sg) =
         List.fold_left (transl_with ~loc:smty.pmty_loc env remove_aliases)
-        ([],init_sg) constraints in
+        ([],Some [],init_sg) constraints in
       let scope = Ctype.create_scope () in
+      let mty = match body.mty_type, rev_withs with
+        | Mty_ident (p,nom), Some withs ->
+            Mty_ident (p, Nominal.add nom withs final_sg)
+        | _ -> Mty_signature final_sg
+      in
       mkmty (Tmty_with ( body, List.rev rev_tcstrs))
-        (Mtype.freshen ~scope (Mty_signature final_sg)) env loc
+        (Mtype.freshen ~scope mty) env loc
         smty.pmty_attributes
   | Pmty_typeof smod ->
       let env = Env.in_signature false env in
@@ -1428,7 +1461,7 @@ and transl_modtype_aux env smty =
   | Pmty_extension ext ->
       raise (Error_forward (Builtin_attributes.error_of_extension ext))
 
-and transl_with ~loc env remove_aliases (rev_tcstrs,sg) constr =
+and transl_with ~loc env remove_aliases (rev_tcstrs,rev_withs,sg) constr =
   let lid, with_info = match constr with
     | Pwith_type (l,decl) ->l , With_type decl
     | Pwith_typesubst (l,decl) ->l , With_typesubst decl
@@ -1445,8 +1478,12 @@ and transl_with ~loc env remove_aliases (rev_tcstrs,sg) constr =
         let mty = transl_modtype env smty in
         l, With_modtypesubst mty
   in
-  let (tcstr, sg) = merge_constraint env loc sg lid with_info in
-  (tcstr :: rev_tcstrs, sg)
+  let (tcstr, nom, sg) = merge_constraint env loc sg lid with_info in
+  let rev_withs = match rev_withs, nom with
+    | Some rev_withs, Some w -> Some (w :: rev_withs)
+    | _ -> None
+  in
+  (tcstr :: rev_tcstrs, rev_withs, sg)
 
 
 
@@ -1922,7 +1959,13 @@ let path_of_module mexp =
    do not contain non-generalized type variable *)
 
 let rec nongen_modtype env f = function
-    Mty_ident _ -> false
+    Mty_ident (_,nom) ->
+      begin match Nominal.signature nom with
+      | Some sg ->
+          let env = Env.add_signature sg env in
+          List.exists (nongen_signature_item env f) sg
+      | None -> false
+      end
   | Mty_alias _ -> false
   | Mty_signature sg ->
       let env = Env.add_signature sg env in
@@ -2964,7 +3007,8 @@ let type_structure = type_structure false None
 (* Normalize types in a signature *)
 
 let rec normalize_modtype = function
-    Mty_ident _
+  | Mty_ident (_,nom) ->
+      Option.iter normalize_signature (Nominal.signature nom)
   | Mty_alias _ -> ()
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body

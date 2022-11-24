@@ -1775,8 +1775,8 @@ let is_identchar c =
 let rec components_of_module_maker
           {cm_env; cm_prefixing_subst;
            cm_path; cm_addr; cm_mty; cm_shape} : _ result =
-  match scrape_alias cm_env cm_mty with
-    MtyL_signature sg ->
+  let components (mty : Subst.Lazy.modtype) : _ result = match mty with
+  | MtyL_signature sg ->
       let c =
         { comp_values = NameMap.empty;
           comp_constrs = NameMap.empty;
@@ -1938,7 +1938,7 @@ let rec components_of_module_maker
               NameMap.add (Ident.name id) cltda c.comp_cltypes)
         items_and_paths;
         Ok (Structure_comps c)
-  | MtyL_functor(arg, ty_res) ->
+  | Subst.Lazy.MtyL_functor(arg, ty_res) ->
       let sub = cm_prefixing_subst in
       let scoping = Subst.Rescope (Path.scope cm_path) in
       let open Subst.Lazy in
@@ -1956,6 +1956,14 @@ let rec components_of_module_maker
           fcomp_subst_cache = Hashtbl.create 17 })
   | MtyL_ident _ -> Error No_components_abstract
   | MtyL_alias p -> Error (No_components_alias p)
+  in
+  match scrape_alias cm_env cm_mty with
+  | MtyL_ident (_,nom) as mty ->
+      begin match Subst.Lazy.Nominal.signature nom with
+      | Some sg -> components (Subst.Lazy.MtyL_signature sg)
+      | None -> components mty
+      end
+  | mty -> components mty
 
 (* Insertion of bindings by identifier + path *)
 

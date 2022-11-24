@@ -402,8 +402,12 @@ module Nominal = struct
   let signature = function
     | ([], _) -> None
     | (_, sg) -> Some sg
-  
-  let add nom c f = (constraints nom @ [c], f (signature nom))
+
+  let map_signature f = function
+    | ([], sg) -> ([], sg)
+    | (cs, sg) -> (cs, f sg)
+
+  let add nom cs sg = (constraints nom @ cs, sg)
 
   let make cs sg = (cs,sg)
 end

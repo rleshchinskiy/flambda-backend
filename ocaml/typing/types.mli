@@ -665,7 +665,8 @@ module Nominal : sig
   val is_empty : nominal -> bool
   val constraints : nominal -> nominal_with list
   val signature : nominal -> signature option
-  val add : nominal -> nominal_with -> (signature option -> signature) -> nominal
+  val map_signature : (signature -> signature) -> nominal -> nominal
+  val add : nominal -> nominal_with list -> signature -> nominal
 
   val make : nominal_with list -> signature -> nominal
 end

@@ -28,6 +28,8 @@ open Outcometree
 module String = Misc.Stdlib.String
 module Int = Misc.Stdlib.Int
 
+let rl_print_uniques = Option.is_some (Sys.getenv_opt "RL_PRINT_UNIQUES")
+
 let rl_print_with =
   match Sys.getenv_opt "RL_PRINT_WITH" with
   | None -> Option.is_some (Sys.getenv_opt "RL_WITH")
@@ -296,12 +298,14 @@ let env_ident namespace name =
   | _ -> None
   | exception Not_found -> None
 
+let rl_ident_name = if rl_print_uniques then Ident.unique_name else  Ident.name
+
 (** Associate a name to the identifier [id] within [namespace] *)
 let ident_name_simple namespace id =
   if not !enabled || fuzzy_id namespace id then
-    Out_name.create (Ident.name id)
+    Out_name.create (rl_ident_name id)
   else
-  let name = Ident.name id in
+  let name = rl_ident_name id in
   match M.find name (get namespace) with
   | Uniquely_associated_to (id',r) when Ident.same id id' ->
       r

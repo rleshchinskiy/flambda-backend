@@ -72,6 +72,7 @@ let rec strengthen_lazy ~aliasable env mty p =
 
 and strengthen_lazy_sig' ~aliasable env sg p =
   let open Subst.Lazy in
+  (*
   let add_with w = Option.map (fun ws -> w :: ws) in
   let strengthen_item (env, withs) = function
     | SigL_value(_, _, _) as sigelt ->
@@ -129,7 +130,7 @@ and strengthen_lazy_sig' ~aliasable env sg p =
   in
   let ((_, withs), items) = List.fold_left_map strengthen_item (env, Some []) sg in
   (Option.map List.rev withs, List.filter_map Fun.id items)
-  (*
+  *)
   match sg with
     [] -> []
   | (SigL_value(_, _, _) as sigelt) :: rem ->
@@ -172,7 +173,7 @@ and strengthen_lazy_sig' ~aliasable env sg p =
                See [Typemod.check_recmodule_inclusion]. *)
             decl
         | _ ->
-            {decl with mtdl_type = Some(MtyL_ident(Pdot(p,Ident.name id)))}
+            {decl with mtdl_type = Some(MtyL_ident(Pdot(p,Ident.name id), Subst.Lazy.Nominal.empty))}
       in
       let env = Env.add_modtype_lazy ~update_summary:false id decl env in
       SigL_modtype(id, newdecl, vis) ::
@@ -182,11 +183,11 @@ and strengthen_lazy_sig' ~aliasable env sg p =
       sigelt :: strengthen_lazy_sig' ~aliasable env rem p
   | (SigL_class_type _ as sigelt) :: rem ->
       sigelt :: strengthen_lazy_sig' ~aliasable env rem p
-  *)
+
 and strengthen_lazy_sig ~aliasable env sg p =
   let sg = Subst.Lazy.force_signature_once sg in
-  let withs, sg = strengthen_lazy_sig' ~aliasable env sg p in
-  withs, Subst.Lazy.of_signature_items sg
+  let (* withs, *) sg = strengthen_lazy_sig' ~aliasable env sg p in
+  (* withs, *) None,  Subst.Lazy.of_signature_items sg
 
 and strengthen_lazy_decl ~aliasable env md p =
   let open Subst.Lazy in
@@ -252,8 +253,8 @@ let rec make_aliases_absent pres mty =
   | Mty_functor(arg, res) ->
       let _, res = make_aliases_absent Mp_present res in
       pres, Mty_functor(arg, res)
-  | mty ->
-      pres, mty
+  | Mty_ident (p,nom) ->
+      pres, Mty_ident (p, Nominal.map_signature make_aliases_absent_sig nom)
 
 and make_aliases_absent_sig sg =
   match sg with
@@ -421,6 +422,8 @@ let rec enrich_modtype env p mty =
   match mty with
     Mty_signature sg ->
       Mty_signature(List.map (enrich_item env p) sg)
+  | Mty_ident (p,nom) ->
+      Mty_ident (p, Nominal.map_signature (List.map (enrich_item env p)) nom)
   | _ ->
       mty
 
@@ -439,7 +442,11 @@ and enrich_item env p = function
 
 let rec type_paths env p mty =
   match scrape env mty with
-    Mty_ident _ -> []
+    Mty_ident (p,nom) ->
+    begin match Nominal.signature nom with
+    | Some sg -> type_paths_sig env p sg
+    | None -> []
+    end
   | Mty_alias _ -> []
   | Mty_signature sg -> type_paths_sig env p sg
   | Mty_functor _ -> []
@@ -464,7 +471,11 @@ let rec no_code_needed_mod env pres mty =
   | Mp_absent -> true
   | Mp_present -> begin
       match scrape env mty with
-        Mty_ident _ -> false
+        Mty_ident (_, nom) ->
+          begin match Nominal.signature nom with
+          | Some sg -> no_code_needed_sig env sg
+          | None -> false
+          end
       | Mty_signature sg -> no_code_needed_sig env sg
       | Mty_functor _ -> false
       | Mty_alias _ -> false
@@ -590,6 +601,13 @@ let collect_arg_paths mty =
                 Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
             | _ -> ())
           sg
+    | Sig_module (id, _, {md_type=Mty_ident (_,nom)}, _, _) ->
+      Nominal.signature nom |> Option.iter
+        (List.iter
+          (function Sig_module (id', _, _, _, _) ->
+              subst :=
+                Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
+            | _ -> ()))
     | _ -> ()
   in
   let it = {type_iterators with it_path; it_signature_item} in
@@ -609,6 +627,8 @@ let rec remove_aliases_mty env args pres mty =
     match args.scrape env mty with
       Mty_signature sg ->
         Mp_present, Mty_signature (remove_aliases_sig env args' sg)
+    | Mty_ident (p,nom) ->
+        Mp_present, Mty_ident (p, Nominal.map_signature (remove_aliases_sig env args') nom)
     | Mty_alias _ ->
         let mty' = Env.scrape_alias env mty in
         if mty' = mty then begin

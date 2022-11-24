@@ -1027,6 +1027,7 @@ module Functor_inclusion_diff = struct
 
 
   let keep_expansible_param = function
+    | Mty_ident (_,nom) when not (Nominal.is_empty nom) -> None
     | Mty_ident _ | Mty_alias _ as mty -> Some mty
     | Mty_signature _ | Mty_functor _ -> None
 
