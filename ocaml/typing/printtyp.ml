@@ -30,6 +30,8 @@ module Int = Misc.Stdlib.Int
 
 let rl_print_uniques = Option.is_some (Sys.getenv_opt "RL_PRINT_UNIQUES")
 
+let rl_ident_name = if rl_print_uniques then Ident.unique_name else  Ident.name
+
 let rl_print_with =
   match Sys.getenv_opt "RL_PRINT_WITH" with
   | None -> Option.is_some (Sys.getenv_opt "RL_WITH")
@@ -297,8 +299,6 @@ let env_ident namespace name =
   | Pident id -> Some id
   | _ -> None
   | exception Not_found -> None
-
-let rl_ident_name = if rl_print_uniques then Ident.unique_name else  Ident.name
 
 (** Associate a name to the identifier [id] within [namespace] *)
 let ident_name_simple namespace id =
@@ -1455,7 +1455,7 @@ let rec tree_of_type_decl id decl =
           else (NoVariance, NoInjectivity))
         decl.type_params decl.type_variance
     in
-    (Ident.name id,
+    (rl_ident_name id,
      List.map2 (fun ty cocn -> type_param (tree_of_typexp Type ty), cocn)
        params vari)
   in
@@ -1899,12 +1899,12 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       begin match Types.Nominal.signature nom with
         | Some sg when rl_print_with ->
             let mk_with = function
-              | Types.Nom_with_module (ns, p, a) ->
-                  let aliasable = match a with
-                  | Aliasable -> true
-                  | NotAliasable -> false
+              | Types.Nom_with_module (ns, p, k) ->
+                  let kind = match k with
+                  | Wkind_user x -> Owk_user x
+                  | Wkind_strengthen x -> Owk_strengthen x
                   in
-                  Onom_with_module (String.concat "." ns, tree_of_path Module p, aliasable)
+                  Onom_with_module (String.concat "." ns, tree_of_path Module p, kind)
               | Types.Nom_with_type (ns, p) ->
                   Onom_with_type (String.concat "." ns, tree_of_path Type p)
               in
@@ -1996,10 +1996,10 @@ and tree_of_modtype_declaration id decl =
     | None -> Omty_abstract
     | Some mty -> tree_of_modtype mty
   in
-  Osig_modtype (Ident.name id, mty)
+  Osig_modtype (rl_ident_name id, mty)
 
 and tree_of_module id ?ellipsis mty rs =
-  Osig_module (Ident.name id, tree_of_modtype ?ellipsis mty, tree_of_rec rs)
+  Osig_module (rl_ident_name id, tree_of_modtype ?ellipsis mty, tree_of_rec rs)
 
 let rec functor_parameters ~sep custom_printer = function
   | [] -> ignore

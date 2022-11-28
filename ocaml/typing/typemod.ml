@@ -21,6 +21,8 @@ open Parsetree
 open Types
 open Format
 
+let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+
 let () = Includemod_errorprinter.register ()
 
 module Sig_component_kind = Shape.Sig_component_kind
@@ -705,11 +707,18 @@ let merge_constraint initial_env loc sg lid constr =
     | Sig_module(id, pres, md, rs, priv), [s],
       With_module {lid=lid'; md=md'; path; remove_aliases}
       when Ident.name id = s ->
+        if rl_debugging then (
+          Format.printf "@[<hv 2>With_module %a@]@."
+            Printtyp.modtype md'.md_type
+        );
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
         let mty = md'.md_type in
         let mty = Mtype.scrape_for_type_of ~remove_aliases sig_env mty in
         let md'' = { md' with md_type = mty } in
         let newmd = Mtype.strengthen_decl ~aliasable:false sig_env md'' path in
+        if rl_debugging then (
+          Format.printf "/With_module@."
+        );
         ignore(Includemod.modtypes  ~mark:Mark_both ~loc sig_env
                  newmd.md_type md.md_type);
         return
@@ -752,7 +761,13 @@ let merge_constraint initial_env loc sg lid constr =
     with
     | Some (x,sg) ->
         let nom = match constr with
-        | With_module wm -> Some (Nom_with_module (namelist, wm.path, NotAliasable))
+        | With_module wm ->             
+            if rl_debugging then (
+              Format.printf "@[<hv 2>with %a %a@]@."
+                Printtyp.path wm.path
+                Printtyp.modtype wm.md.md_type
+            );
+            Some (Nom_with_module (namelist, wm.path, Wkind_user wm.remove_aliases))
         | _ -> None
         in
         x, nom, sg

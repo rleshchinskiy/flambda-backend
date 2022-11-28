@@ -136,6 +136,7 @@ module Lazy : sig
     val is_empty : nominal -> bool
     val signature : nominal -> signature option
     val add : nominal -> nominal_with list -> signature -> nominal
+    val map_signature : (signature_item list -> signature_item list) -> nominal -> nominal
   end
 
 

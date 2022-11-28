@@ -622,8 +622,12 @@ and print_simple_out_module_type ppf =
       | Some (constrs, sg)  ->
          let rec print_constrs sep ppf = function
            | [] -> ()
-           | Onom_with_module (l,r,a) :: constrs ->
-              let eq = if a then "@=" else "=" in
+           | Onom_with_module (l,r,k) :: constrs ->
+              let eq = match k with
+              | Owk_user _ -> "="
+              | Owk_strengthen true -> "@="
+              | Owk_strengthen false -> "*="
+              in
               fprintf ppf "@ %s module %s %s %a%a"
                 sep
                 l

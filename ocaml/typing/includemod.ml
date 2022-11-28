@@ -503,17 +503,19 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
               | Error reason -> Error (Error.After_alias_expansion reason)
           end
     end
+  (*
   | (Mty_ident (_,nom1), _) when not (Nominal.is_empty nom1) ->
       begin match Nominal.signature nom1 with
       | Some sg -> try_modtypes ~in_eq ~loc env ~mark subst (Mty_signature sg) mty2 orig_shape
       | None -> assert false
       end
+  *)
   | (_, Mty_ident (_,nom2)) when not (Nominal.is_empty nom2) ->
       begin match Nominal.signature nom2 with
       | Some sg -> try_modtypes ~in_eq ~loc env ~mark subst mty1 (Mty_signature sg) orig_shape
       | None -> assert false
       end
-  | (Mty_ident (p1,_), Mty_ident (p2,_)) ->
+  | (Mty_ident (p1,nom1), Mty_ident (p2,nom2)) when Nominal.is_empty nom1 && Nominal.is_empty nom2 ->
       let p1 = Env.normalize_modtype_path env p1 in
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       if Path.same p1 p2 then Ok (Tcoerce_none, orig_shape)
@@ -523,13 +525,19 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
             try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
         | None, _  | _, None -> Error (Error.Mt_core Abstract_module_type)
         end
-  | (Mty_ident (p1,_), _) ->
+  | (Mty_ident (p1,nom), _) ->
       let p1 = Env.normalize_modtype_path env p1 in
+      begin match Mtype.expand_modtype_with env p1 nom with
+      | Some mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+      | None -> Error (Error.Mt_core Abstract_module_type)
+      end
+      (*
       begin match expand_modtype_path env p1 with
       | Some p1 ->
           try_modtypes ~in_eq ~loc env ~mark subst p1 mty2 orig_shape
       | None -> Error (Error.Mt_core Abstract_module_type)
       end
+      *)
   | (_, Mty_ident (p2,_)) ->
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       begin match expand_modtype_path env p2 with

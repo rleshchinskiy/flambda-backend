@@ -768,6 +768,14 @@ module Lazy = struct
     let signature (_,sg) = sg
 
     let add (cs, _) ds sg = (cs @ ds, Some sg)
+
+    let map_signature f (cs,sg) =
+      let apply sg =
+        let sg = f (force_signature_once sg)
+        in 
+        Lazy_backtrack.create_forced (S_lazy sg)
+      in
+      (cs, Option.map apply sg)
   end
 
   let of_module_decl = lazy_module_decl

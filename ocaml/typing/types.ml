@@ -333,8 +333,12 @@ type aliasability =
   | Aliasable
   | NotAliasable
 
+type with_kind =
+  | Wkind_user of bool (* remove aliases *)
+  | Wkind_strengthen of bool (* aliasable *)
+
 type nominal_with =
-  | Nom_with_module of string list * Path.t * aliasability
+  | Nom_with_module of string list * Path.t * with_kind
   | Nom_with_type of string list * Path.t
 
 type module_type =

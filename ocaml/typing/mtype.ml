@@ -19,6 +19,10 @@ open Asttypes
 open Path
 open Types
 
+let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+
+let rl_with = Option.is_some (Sys.getenv_opt "RL_WITH")
+
 let rec scrape_lazy env mty =
   let open Subst.Lazy in
   match mty with
@@ -106,7 +110,7 @@ and strengthen_lazy_sig' ~aliasable env sg p =
         in
         let env =
           Env.add_module_declaration_lazy ~update_summary:false id pres md env in
-        let bind = Nom_with_module ([Ident.name id],name, if aliasable then Aliasable else NotAliasable) in
+        let bind = Nom_with_module ([Ident.name id], name, Wkind_strengthen aliasable) in
         ((env, add_with bind withs), Some (SigL_module(id, pres, str, rs, vis)))
         (* Need to add the module in case it defines manifest module types *)
     | SigL_modtype(id, decl, vis) ->
@@ -137,10 +141,18 @@ and strengthen_lazy_sig ~aliasable env sg p =
 
 and strengthen_lazy_decl ~aliasable env md p =
   let open Subst.Lazy in
-  match md.mdl_type with
+  let md' = match md.mdl_type with
   | MtyL_alias _ -> md
   | _ when aliasable -> {md with mdl_type = MtyL_alias p}
   | mty -> {md with mdl_type = strengthen_lazy ~aliasable env mty p}
+  in
+  if rl_debugging then (
+    Format.printf "@[<hv 2>strengthen_lazy_decl %a@ %a@ %a@]@."
+      Printtyp.path p
+      Printtyp.modtype (force_modtype md.mdl_type)
+      Printtyp.modtype (force_modtype md'.mdl_type)
+  );
+  md'
 
 let () = Env.strengthen := strengthen_lazy
 
@@ -149,9 +161,17 @@ let strengthen ~aliasable env mty p =
   Subst.Lazy.force_modtype mty
 
 let strengthen_decl ~aliasable env md p =
-  let md = strengthen_lazy_decl ~aliasable env
+  let md' = strengthen_lazy_decl ~aliasable env
              (Subst.Lazy.of_module_decl md) p in
-  Subst.Lazy.force_module_decl md
+  let md'' = Subst.Lazy.force_module_decl md' in
+  if rl_debugging then (
+    Format.printf "@[<hv 1>strengthen_decl %a@ %a@ %a@]@."
+      Printtyp.path p
+      Printtyp.modtype md.md_type
+      Printtyp.modtype md''.md_type
+  );
+  md''
+
 
 let rec sig_make_manifest sg =
   match sg with
@@ -192,40 +212,246 @@ let rec sig_make_manifest sg =
     Sig_modtype(Ident.rename id, newdecl, vis) :: sig_make_manifest rem
 
 let rec make_aliases_absent pres mty =
+  let open Subst.Lazy in
   match mty with
-  | Mty_alias _ -> Mp_absent, mty
-  | Mty_signature sg ->
-      pres, Mty_signature(make_aliases_absent_sig sg)
-  | Mty_functor(arg, res) ->
+  | MtyL_alias _ -> Mp_absent, mty
+  | MtyL_signature sg ->
+      let sg = force_signature_once sg
+            |> make_aliases_absent_sig
+            |> of_signature_items
+      in
+      pres, MtyL_signature sg
+  | MtyL_functor(arg, res) ->
       let _, res = make_aliases_absent Mp_present res in
-      pres, Mty_functor(arg, res)
-  | Mty_ident (p,nom) ->
-      pres, Mty_ident (p, Nominal.map_signature make_aliases_absent_sig nom)
+      pres, MtyL_functor(arg, res)
+  | MtyL_ident (p,nom) ->
+      pres, MtyL_ident (p, Nominal.map_signature make_aliases_absent_sig nom)
 
 and make_aliases_absent_sig sg =
+  let open Subst.Lazy in
   match sg with
     [] -> []
-  | Sig_module(id, pres, md, rs, priv) :: rem ->
-      let pres, md_type = make_aliases_absent pres md.md_type in
-      let md = { md with md_type } in
-      Sig_module(id, pres, md, rs, priv) :: make_aliases_absent_sig rem
+  | SigL_module(id, pres, md, rs, priv) :: rem ->
+      let pres, mdl_type = make_aliases_absent pres md.mdl_type in
+      let md = { md with mdl_type } in
+      SigL_module(id, pres, md, rs, priv) :: make_aliases_absent_sig rem
   | sigelt :: rem ->
       sigelt :: make_aliases_absent_sig rem
 
-let scrape_for_type_of env pres mty =
+let scrape_for_lazy_type_of env pres mty =
   let rec loop env path mty =
     match mty, path with
-    | Mty_alias path, _ -> begin
+    | Subst.Lazy.MtyL_alias path, _ -> begin
         try
-          let md = Env.find_module path env in
-          loop env (Some path) md.md_type
+          let md = Env.find_module_lazy path env in
+          loop env (Some path) md.mdl_type
         with Not_found -> mty
       end
     | mty, Some path ->
-        strengthen ~aliasable:false env mty path
+        strengthen_lazy ~aliasable:false env mty path
     | _ -> mty
   in
   make_aliases_absent pres (loop env None mty)
+
+let scrape_for_type_of env pres mty =
+  let pres, mty = scrape_for_lazy_type_of env pres (Subst.Lazy.of_modtype mty)
+  in
+  pres, Subst.Lazy.force_modtype mty
+
+
+
+let rec constrain_modtype env constr mty =
+  let open Subst.Lazy in
+  match mty with
+  | MtyL_ident (p, nom) ->
+      let constrain sg = MtyL_ident (p, Nominal.add nom [constr] (constrain_signature env constr sg)) in
+      begin match Nominal.signature nom with
+      | Some sg -> constrain sg
+      | None ->
+        let p = Env.normalize_modtype_path env p in
+        let mty = Env.find_modtype_expansion_lazy p env in
+        match mty with
+        | MtyL_signature sg -> constrain sg
+        | mty -> constrain_modtype env constr mty
+      end
+  | MtyL_alias p ->
+      let p = Env.normalize_module_path (Some Location.none) env p in
+      let mty = (Env.find_module_lazy p env).mdl_type in
+      constrain_modtype env constr mty
+  | MtyL_signature sg -> MtyL_signature (constrain_signature env constr sg)
+  | MtyL_functor _ -> assert false
+
+and constrain_signature env constr sg =
+  Subst.Lazy.force_signature_once sg
+  |> List.map (constrain_sig_item env constr)
+  |> Subst.Lazy.of_signature_items
+
+and constrain_sig_item env constr item =
+  let open Subst.Lazy in
+  match constr, item with
+  | Nom_with_module ([s], p, k), SigL_module(id, pres, md, rs, vis) when Ident.name id = s ->
+    let aliasable, md = match k with
+      | Wkind_user remove_aliases when remove_aliases -> assert false
+      | Wkind_user _ ->
+        let md = Env.find_module_lazy p env in
+        let mty = md.mdl_type in
+        let _, mty = scrape_for_lazy_type_of env Mp_present mty in
+        false, { md with mdl_type = mty}
+      | Wkind_strengthen a -> a, md
+    in
+    let str =
+        strengthen_lazy_decl ~aliasable env md p
+    in
+    SigL_module (id, pres, str, rs, vis)
+
+(*
+        let sig_env = Env.add_signature sg_for_env outer_sig_env in
+        let mty = md'.md_type in
+        let mty = Mtype.scrape_for_type_of ~remove_aliases sig_env mty in
+        let md'' = { md' with md_type = mty } in
+        let newmd = Mtype.strengthen_decl ~aliasable:false sig_env md'' path in
+*)
+
+    (*
+      let mty = match a with
+        | Aliasable ->
+          if rl_debugging then (
+            Format.printf "@[<hv 2>aliasing %a to %a@]@."
+              Printtyp.ident id
+              Printtyp.path p
+          );
+          MtyL_alias p
+        | NotAliasable -> 
+            let p = Env.normalize_module_path (Some Location.none) env p in
+            let mty = (Env.find_module_lazy p env).mdl_type in
+            if rl_debugging then (
+              Format.printf "@[<hv 2>setting %a to@ %a@]@."
+                Printtyp.ident id
+                Printtyp.modtype (force_modtype mty)
+            );
+            mty
+      in
+      let md = { md with mdl_type = mty } in
+      SigL_module(id, pres, md, rs, vis)
+    *)
+  | Nom_with_module (s :: ns, p, a), SigL_module(id, pres, md, rs, vis) when Ident.name id = s ->
+      let md = { md with mdl_type = constrain_modtype env (Nom_with_module (ns,p,a)) md.mdl_type } in
+      SigL_module(id, pres, md, rs, vis)
+  | Nom_with_type ([s], p), SigL_type(id, decl, rs, vis) when Ident.name id = s ->
+      let decl =
+        match decl.type_manifest, decl.type_private, decl.type_kind with
+          Some _, Public, _ -> decl
+        | Some _, Private, (Type_record _ | Type_variant _) -> decl
+        | _ ->
+          if rl_debugging then (
+            Format.printf "@[<hv 2>renaming %a to %a@]@."
+              Printtyp.ident id
+              Printtyp.path p
+          );
+          (* let name = Pdot (p, Ident.name id) in *)
+          let manif = 
+                Some(Btype.newgenty(Tconstr(p, decl.type_params, ref Mnil)))
+          in
+          if decl.type_kind = Type_abstract then
+            { decl with type_private = Public; type_manifest = manif }
+          else
+            { decl with type_manifest = manif }
+      in
+      SigL_type(id, decl, rs, vis)
+      (*
+      | SigL_type(id, decl, rs, vis) ->
+        let (newdecl, newwiths) =
+          match decl.type_manifest, decl.type_private, decl.type_kind with
+            Some _, Public, _ -> (decl, withs)
+          | Some _, Private, (Type_record _ | Type_variant _) -> (decl, withs)
+          | _ ->
+              let name = Pdot(p, Ident.name id) in
+              let manif =
+                Some(Btype.newgenty(Tconstr(name, decl.type_params, ref Mnil)))
+              in
+              let decl = if decl.type_kind = Type_abstract then
+                    { decl with type_private = Public; type_manifest = manif }
+                  else
+                    { decl with type_manifest = manif }
+              in
+              (decl, add_with (Sig_with_type ([Ident.name id], name)) withs )
+        in
+        ((env, newwiths), Some (SigL_type(id, newdecl, rs, vis)))
+      *)
+    | Nom_with_type (s :: ns, p), SigL_module(id, pres, md, rs, vis) when Ident.name id = s ->
+        let md = { md with mdl_type = constrain_modtype env (Nom_with_type (ns,p)) md.mdl_type } in
+        SigL_module(id, pres, md, rs, vis)
+    | _, sigelt -> sigelt
+
+let expand_lazy_modtype_with env p nom =
+  let expand () =
+    match Env.find_modtype_expansion_lazy p env with
+    | mty -> Some mty
+    | exception Not_found -> None
+  in
+  if rl_with
+    then
+      Option.map
+        (fun mty -> List.fold_left (fun t c -> constrain_modtype env c t) mty (Nominal.constraints nom))
+        (expand ())
+    else match Nominal.signature nom with
+      | Some sg -> Some (Subst.Lazy.MtyL_signature (Subst.Lazy.of_signature sg))
+      | None -> expand ()
+
+
+let expand_modtype_with env p nom =
+  expand_lazy_modtype_with env p nom
+  |> Option.map Subst.Lazy.force_modtype
+  (*
+  let expand () =
+    match Env.find_modtype_expansion p env with
+    | mty -> Some mty
+    | exception Not_found -> None
+  in
+  if rl_with
+    then
+      Option.map
+        (fun mty -> List.fold_left (fun t c -> constrain_modtype env c t) mty (Nominal.constraints nom))
+        (expand ())
+    else match Nominal.signature nom with
+      | Some sg -> Some (Mty_signature sg)
+      | None -> expand ()
+  *)
+
+
+(*
+let unfold_signature env subst ~aliasable sg =
+  let sg' = match Signature.get_nominal sg with
+    | None -> Signature.unpack sg
+    | Some (p, constrs) ->
+        if rl_debugging then (
+          Format.printf "@[<hv 2>unfolding %a@]@."
+            Printtyp.modtype
+            (Mty_signature sg));
+        let p = Env.normalize_modtype_path env (Subst.modtype_path subst p) in
+        match Env.find_modtype_expansion p env with
+        | Mty_signature sg ->
+            let items = Signature.unpack sg in
+            let sg' =
+              List.map (subst_constraint subst) constrs
+              |> List.fold_left
+                  (fun items constr ->
+                    List.map (constrain_sig_item env constr ~aliasable) items)
+                  items 
+            in
+            if rl_debugging then (
+            Format.printf "@[<hv 2>unfolded to %a@]@."
+              Printtyp.modtype
+              (Mty_signature (Signature.pack sg')));
+            sg'
+        | mty ->
+            Format.printf "@[<hv 2>unexpectedtly unfolded to %a@]@."
+              Printtyp.modtype mty;
+            assert false
+  in
+  if rl_with then sg' else Signature.unpack sg
+*)
+  
 
 (* In nondep_supertype, env is only used for the type it assigns to id.
    Hence there is no need to keep env up-to-date by adding the bindings

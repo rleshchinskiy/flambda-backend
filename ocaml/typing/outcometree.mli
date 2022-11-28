@@ -113,8 +113,12 @@ and out_class_sig_item =
   | Ocsg_method of string * bool * bool * out_type
   | Ocsg_value of string * bool * bool * out_type
 
+type out_with_kind =
+  | Owk_user of bool
+  | Owk_strengthen of bool
+
 type out_nominal_with =
-  | Onom_with_module of string * out_ident * bool
+  | Onom_with_module of string * out_ident * out_with_kind
   | Onom_with_type of string * out_ident
 
 type out_module_type =
