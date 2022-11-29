@@ -19,6 +19,8 @@ open Misc
 open Typedtree
 open Types
 
+let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+
 type pos =
   | Module of Ident.t
   | Modtype of Ident.t
@@ -510,11 +512,13 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       | None -> assert false
       end
   *)
+  (*
   | (_, Mty_ident (_,nom2)) when not (Nominal.is_empty nom2) ->
       begin match Nominal.signature nom2 with
       | Some sg -> try_modtypes ~in_eq ~loc env ~mark subst mty1 (Mty_signature sg) orig_shape
       | None -> assert false
       end
+  *)
   | (Mty_ident (p1,nom1), Mty_ident (p2,nom2)) when Nominal.is_empty nom1 && Nominal.is_empty nom2 ->
       let p1 = Env.normalize_modtype_path env p1 in
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
@@ -527,6 +531,10 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
         end
   | (Mty_ident (p1,nom), _) ->
       let p1 = Env.normalize_modtype_path env p1 in
+      if rl_debugging then (
+        Format.printf "@[<hv 2>expandL %a@]@."
+          Printtyp.modtype (Mty_ident (p1,nom))
+      );
       begin match Mtype.expand_modtype_with env p1 nom with
       | Some mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
       | None -> Error (Error.Mt_core Abstract_module_type)
@@ -538,8 +546,29 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       | None -> Error (Error.Mt_core Abstract_module_type)
       end
       *)
-  | (_, Mty_ident (p2,_)) ->
-      let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
+  | (_, Mty_ident (p2,nom)) ->
+    let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
+    let nom = Subst.Lazy.of_nominal nom
+      |> Subst.Lazy.nominal Subst.Keep subst
+      |> Subst.Lazy.force_nominal
+    in
+    if rl_debugging then (
+      Format.printf "@[<hv 2>expandR %a@]@."
+        Printtyp.modtype (Mty_ident (p2,nom))
+    );
+    begin match Mtype.expand_modtype_with env p2 nom with
+    | Some mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+    | None ->
+        begin match mty1 with
+        | Mty_functor _ ->
+            let params1 = retrieve_functor_params env mty1 in
+            let d = Error.sdiff params1 ([],mty2) in
+            Error Error.(Functor (Params d))
+        | _ -> Error Error.(Mt_core Not_an_identifier)
+        end
+    end
+    (*
+    let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       begin match expand_modtype_path env p2 with
       | Some p2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 p2 orig_shape
       | None ->
@@ -551,6 +580,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
           | _ -> Error Error.(Mt_core Not_an_identifier)
           end
       end
+    *)
   | (Mty_signature sig1, Mty_signature sig2) ->
       begin match
         signatures ~in_eq ~loc env ~mark subst sig1 sig2 orig_shape
@@ -653,6 +683,11 @@ and functor_param ~in_eq ~loc env ~mark subst param1 param2 =
 
 and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
     subst mty1 path1 mty2 shape =
+  if rl_debugging then (
+    Format.printf "@[<hv 2>strengthened_modtypes@ %a@ %a@]@."
+      Printtyp.modtype mty1
+      Printtyp.modtype mty2
+  );
   match mty1, mty2 with
   | Mty_ident (p1,nom1), Mty_ident (p2,nom2)
       when equal_modtype_paths env p1 subst p2
@@ -983,6 +1018,11 @@ let () =
    interface. *)
 
 let compunit env ~mark impl_name impl_sig intf_name intf_sig unit_shape =
+  if rl_debugging then (
+    Format.printf "@[<hv 2>compunit@ %a@ %a@]@."
+      Printtyp.signature impl_sig
+      Printtyp.signature intf_sig
+  );
   match
     signatures ~in_eq:false ~loc:(Location.in_file impl_name) env ~mark
       Subst.identity impl_sig intf_sig unit_shape

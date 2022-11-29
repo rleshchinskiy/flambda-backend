@@ -784,12 +784,14 @@ module Lazy = struct
   let of_signature sg = Lazy_backtrack.create_forced (S_eager sg)
   let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy sg)
   let of_signature_item = lazy_signature_item
+  let of_nominal = lazy_nominal
 
   let module_decl = subst_lazy_module_decl
   let modtype = subst_lazy_modtype
   let modtype_decl = subst_lazy_modtype_decl
   let signature = subst_lazy_signature
   let signature_item = subst_lazy_signature_item
+  let nominal = subst_lazy_nominal
 
   let force_module_decl = force_module_decl
   let force_modtype = force_modtype
@@ -797,6 +799,7 @@ module Lazy = struct
   let force_signature = force_signature
   let force_signature_once = force_signature_once
   let force_signature_item = force_signature_item
+  let force_nominal = force_nominal
 end
 
 let signature sc s sg =

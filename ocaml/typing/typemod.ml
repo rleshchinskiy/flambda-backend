@@ -708,8 +708,9 @@ let merge_constraint initial_env loc sg lid constr =
       With_module {lid=lid'; md=md'; path; remove_aliases}
       when Ident.name id = s ->
         if rl_debugging then (
-          Format.printf "@[<hv 2>With_module %a@]@."
+          Format.printf "@[<hv 2>With_module %a@ sigis@ %a@]@."
             Printtyp.modtype md'.md_type
+            Printtyp.signature sg_for_env
         );
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
         let mty = md'.md_type in
@@ -2516,6 +2517,12 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
             end;
             nondep_mty
       in
+      if rl_debugging then (
+        Format.printf "@[<hv 2>typeapp@ %a@ to %a@ = %a@]@."
+        Printtyp.modtype mty_functor
+        Printtyp.modtype app_view.arg.mod_type
+        Printtyp.modtype mty_appl
+      );
       check_well_formed_module env apply_loc
         "the signature of this functor application" mty_appl;
       { mod_desc = Tmod_apply(funct, app_view.arg, coercion);
