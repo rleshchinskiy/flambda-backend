@@ -347,7 +347,7 @@ module Nominal = struct
 
   type 'a module_constraint = string list * 'a definition
 
-  type ('a,'s) nominal = ('a module_constraint list * 's) option
+  type 'a nominal = ('a module_constraint list * 'a) option
 
   let rec untyped_path = function
   | Nmty_of p -> p
@@ -362,11 +362,11 @@ module Nominal = struct
   | Some (cs,_) -> cs
   | None -> []
 
-  let signature nom = Option.map snd nom
+  let equivalent_type nom = Option.map snd nom
 
-  let map_signature f = Option.map (fun (cs,sg) -> (cs, f sg))
+  let map_equivalent_type f = Option.map (fun (cs,t) -> (cs, f t))
 
-  let map f g =
+  let map f =
     let rec map_typed_path f = function
     | Nmty_of p -> Nmty_of p
     | Nmty_strengthened (p,t) -> Nmty_strengthened (p,f t)
@@ -378,7 +378,7 @@ module Nominal = struct
     | Nmc_strengthen _ | Nmc_type _ as x -> x
     in
     let map_module_constraint f (ns,def) = (ns, map_definition f def) in
-    Option.map (fun(cs,sg) -> (List.map (map_module_constraint f) cs, g sg))
+    Option.map (fun(cs,ty) -> (List.map (map_module_constraint f) cs, f ty))
 
   let map_paths f g =
     let rec map_typed_path f = function
@@ -397,9 +397,9 @@ module Nominal = struct
 
   let map_nominal f g = Option.map (fun (cs,sg) -> (List.map f cs, g sg))
 
-  let add nom cs sg = match nom with
-  | None -> Some (cs,sg)
-  | Some (ds,_) -> Some (ds @ cs, sg)
+  let add nom cs f = match nom with
+  | None -> Some (cs, f None)
+  | Some (ds,ty) -> Some (ds @ cs, f (Some ty))
 
   let append nom1 nom2 =
     match nom1, nom2 with
@@ -416,7 +416,7 @@ type module_type =
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
 
-and nominal = (module_type, signature) Nominal.nominal
+and nominal = module_type Nominal.nominal
 
 and functor_parameter =
   | Unit

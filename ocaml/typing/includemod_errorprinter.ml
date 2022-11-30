@@ -142,18 +142,8 @@ module Illegal_permutation = struct
      a [pos] path *)
   let rec find env ctx path (mt:Types.module_type) = match mt, path with
     | Mty_ident (_,nom), path when not (Types.Nominal.is_empty nom) ->
-        begin match Types.Nominal.signature nom with
-        | Some s ->
-          begin match path with
-            [] -> List.rev ctx, s
-          | Item k :: q ->
-            begin match runtime_item k s with
-            | Sig_module (id, _, md,_,_) ->
-                find env (Context.Module id :: ctx) q md.md_type
-            | _ -> raise Not_found
-            end
-          | _ -> raise Not_found
-          end
+        begin match Types.Nominal.equivalent_type nom with
+        | Some mty -> find env ctx path mty
         | None -> assert false
         end
     | (Mty_ident (p,_) | Mty_alias p), _ ->

@@ -465,7 +465,7 @@ module Lazy_types = struct
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
 
-  and nominal = (modtype, signature) Types.Nominal.nominal
+  and nominal = modtype Types.Nominal.nominal
 
   and modtype_declaration =
     {
@@ -571,9 +571,9 @@ and force_module_decl md =
     md_attributes = md.mdl_attributes;
     md_loc = md.mdl_loc;
     md_uid = md.mdl_uid }
-and lazy_nominal nom = Nominal.map lazy_modtype (fun sg -> Lazy_backtrack.create_forced (S_eager sg)) nom
+and lazy_nominal nom = Nominal.map lazy_modtype nom
 
-and force_nominal nom = Nominal.map force_modtype force_signature nom
+and force_nominal nom = Nominal.map force_modtype nom
 
 and subst_lazy_nominal scoping s =
   let open Types.Nominal in
@@ -613,7 +613,7 @@ and subst_lazy_nominal scoping s =
     | Nmc_type p -> Nmc_type (type_path s p)
   in
   let module_constraint (ns,def) = (ns, definition def) in
-  map_nominal module_constraint (subst_lazy_signature scoping s)
+  map_nominal module_constraint (subst_lazy_modtype scoping s)
 
 and lazy_modtype = function
   | Mty_ident (p, nom) -> MtyL_ident (p, lazy_nominal nom)

@@ -624,20 +624,20 @@ module Nominal : sig
 
   type 'a module_constraint = string list * 'a definition
 
-  type ('a,'s) nominal
+  type 'a nominal
 
-  val empty : ('a,'s) nominal
-  val is_empty : ('a,'s) nominal -> bool
-  val constraints : ('a,'s) nominal -> 'a module_constraint list
-  val signature : ('a,'s) nominal -> 's option
-  val map_signature : ('s -> 's) -> ('a,'s) nominal -> ('a,'s) nominal
-  val map : ('a -> 'b) -> ('s -> 't) -> ('a,'s) nominal -> ('b,'t) nominal
-  val map_paths : (Path.t -> Path.t) -> (Path.t -> Path.t) -> ('a,'s) nominal -> ('a,'s) nominal
-  val map_nominal : ('a module_constraint -> 'a module_constraint) -> ('s -> 's) -> ('a,'s) nominal -> ('a,'s) nominal
-  val add : ('a,'s) nominal -> 'a module_constraint list -> 's -> ('a,'s) nominal
-  val append : ('a,'s) nominal -> ('a,'s) nominal -> ('a,'s) nominal
+  val empty : 'a nominal
+  val is_empty : 'a nominal -> bool
+  val constraints : 'a nominal -> 'a module_constraint list
+  val equivalent_type : 'a nominal -> 'a option
+  val map_equivalent_type : ('a -> 'a) -> 'a nominal -> 'a nominal
+  val map : ('a -> 'b) -> 'a nominal -> 'b nominal
+  val map_paths : (Path.t -> Path.t) -> (Path.t -> Path.t) -> 'a nominal -> 'a nominal
+  val map_nominal : ('a module_constraint -> 'a module_constraint) -> ('a -> 'a) -> 'a nominal -> 'a nominal
+  val add : 'a nominal -> 'a module_constraint list -> ('a option -> 'a) -> 'a nominal
+  val append : 'a nominal -> 'a nominal -> 'a nominal
 
-  val make : 'a module_constraint list -> 's -> ('a,'s) nominal
+  val make : 'a module_constraint list -> 'a -> 'a nominal
 
   val untyped_path : 'a typed_path -> Path.t
 end
@@ -648,7 +648,7 @@ type module_type =
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
 
-and nominal = (module_type, signature) Nominal.nominal
+and nominal = module_type Nominal.nominal
 
 and functor_parameter =
   | Unit

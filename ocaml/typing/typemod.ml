@@ -106,9 +106,9 @@ let extract_sig env loc mty =
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
   | Mty_ident (_,nom) ->
-      begin match Nominal.signature nom with
-      | Some sg -> sg
-      | None -> raise(Error(loc, env, Signature_expected))
+      begin match Nominal.equivalent_type nom with
+      | Some (Mty_signature sg) -> sg
+      | _ -> raise(Error(loc, env, Signature_expected))
       end
   | _ -> raise(Error(loc, env, Signature_expected))
 
@@ -118,9 +118,9 @@ let extract_sig_open env loc mty =
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
   | Mty_ident (_,nom) as mty ->
-      begin match Nominal.signature nom with
-      | Some sg -> sg
-      | None -> raise(Error(loc, env, Structure_expected mty))
+      begin match Nominal.equivalent_type nom with
+      | Some (Mty_signature sg) -> sg
+      | _ -> raise(Error(loc, env, Structure_expected mty))
       end
   | mty -> raise(Error(loc, env, Structure_expected mty))
 
@@ -134,9 +134,9 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
         match Mtype.scrape env mty_param with
         | Mty_signature sg_param -> sg_param
         | Mty_ident (_,nom) ->
-          begin match Nominal.signature nom with
-          | Some sg -> sg
-          | None -> raise(Error(loc, env, Signature_parameter_expected mty_func))
+          begin match Nominal.equivalent_type nom with
+          | Some (Mty_signature sg) -> sg
+          | _ -> raise(Error(loc, env, Signature_parameter_expected mty_func))
           end
         | _ -> raise (Error (loc,env,Signature_parameter_expected mty_func))
       in
@@ -175,9 +175,9 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
                                             (Mty_functor (Unit,sg))))
           end
         | Mty_ident (_,nom) as sg ->
-          begin match Nominal.signature nom with
-          | Some sg_result -> Tincl_functor coercion, sg_result
-          | None -> raise (Error (loc,env,Signature_result_expected sg))
+          begin match Nominal.equivalent_type nom with
+          | Some (Mty_signature sg_result) -> Tincl_functor coercion, sg_result
+          | _ -> raise (Error (loc,env,Signature_result_expected sg))
           end
         | sg -> raise (Error (loc,env,Signature_result_expected sg))
       in
@@ -748,7 +748,7 @@ let merge_constraint initial_env loc sg lid constr =
                  and just check that the constraint is correct *)
               item
           | Mty_ident (p,nom), _, Some c ->
-              let newmd = {md with md_type = Mty_ident (p, Nominal.add nom [c] newsg )} in
+              let newmd = {md with md_type = Mty_ident (p, Nominal.add nom [c] (fun _ -> Mty_signature newsg) )} in
               Sig_module(id, Mp_present, newmd, rs, priv)
           | _ ->
               let newmd = {md with md_type = Mty_signature newsg} in
@@ -1465,7 +1465,7 @@ and transl_modtype_aux env smty =
       let scope = Ctype.create_scope () in
       let mty = match body.mty_type, rev_withs with
         | Mty_ident (p,nom), Some withs ->
-            Mty_ident (p, Nominal.add nom withs final_sg)
+            Mty_ident (p, Nominal.add nom withs (fun _ -> Mty_signature final_sg))
         | _ -> Mty_signature final_sg
       in
       mkmty (Tmty_with ( body, List.rev rev_tcstrs))
@@ -1977,10 +1977,8 @@ let path_of_module mexp =
 
 let rec nongen_modtype env f = function
     Mty_ident (_,nom) ->
-      begin match Nominal.signature nom with
-      | Some sg ->
-          let env = Env.add_signature sg env in
-          List.exists (nongen_signature_item env f) sg
+      begin match Nominal.equivalent_type nom with
+      | Some mty -> nongen_modtype env f mty
       | None -> false
       end
   | Mty_alias _ -> false
@@ -2194,8 +2192,8 @@ and package_constraints env loc mty constrs =
         Mty_signature (package_constraints_sig env loc sg constrs)
     | Mty_functor _ | Mty_alias _ -> assert false
     | Mty_ident (p,nom) ->
-      begin match Nominal.signature nom with
-      | Some sg -> Mty_signature (package_constraints_sig env loc sg constrs)
+      begin match Nominal.equivalent_type nom with
+      | Some mty -> package_constraints env loc mty constrs
       | None -> raise(Error(loc, env, Cannot_scrape_package_type p))
       end
   end
@@ -3038,7 +3036,7 @@ let type_structure = type_structure false None
 
 let rec normalize_modtype = function
   | Mty_ident (_,nom) ->
-      Option.iter normalize_signature (Nominal.signature nom)
+      Option.iter normalize_modtype (Nominal.equivalent_type nom)
   | Mty_alias _ -> ()
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body

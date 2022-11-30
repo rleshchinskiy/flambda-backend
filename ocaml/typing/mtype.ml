@@ -62,13 +62,14 @@ let rec strengthen_lazy ~aliasable env mty p =
       MtyL_functor(Named (Some param, arg),
         strengthen_lazy ~aliasable:false env res (Papply(p, Pident param)))
   | MtyL_ident (q, nom) ->
-      begin match Nominal.signature nom with
-      | Some sg ->
+      begin match Nominal.equivalent_type nom with
+      | Some (MtyL_signature sg) ->
           let withs, sg = strengthen_lazy_sig ~aliasable env sg p in
           begin match withs with
-          | Some cs -> MtyL_ident (q, Nominal.add nom cs sg)
+          | Some cs -> MtyL_ident (q, Nominal.add nom cs (fun _ -> MtyL_signature sg))
           | None -> MtyL_signature sg
           end
+      | Some _ -> assert false
       | None -> mty
       end
   | mty ->
@@ -231,7 +232,10 @@ let rec make_aliases_absent pres mty =
       let _, res = make_aliases_absent Mp_present res in
       pres, MtyL_functor(arg, res)
   | MtyL_ident (p,nom) ->
-      pres, MtyL_ident (p, Nominal.map_signature signature nom)
+      let recurse mty =
+        let _, mty = make_aliases_absent pres mty in mty
+      in
+      pres, MtyL_ident (p, Nominal.map_equivalent_type recurse nom)
 
 and make_aliases_absent_sig sg =
   let open Subst.Lazy in
@@ -270,16 +274,16 @@ let rec constrain_modtype env constr mty =
   let open Subst.Lazy in
   match mty with
   | MtyL_ident (p, nom) ->
-      let constrain sg = MtyL_ident (p, Nominal.add nom [constr] (constrain_signature env constr sg)) in
-      begin match Nominal.signature nom with
-      | Some sg -> constrain sg
-      | None ->
-        let p = Env.normalize_modtype_path env p in
-        let mty = Env.find_modtype_expansion_lazy p env in
-        match mty with
-        | MtyL_signature sg -> constrain sg
-        | mty -> constrain_modtype env constr mty
-      end
+      let constrain mty =
+        let mty = match mty with
+          | Some mty -> mty
+          | None -> 
+              let p = Env.normalize_modtype_path env p in
+              Env.find_modtype_expansion_lazy p env
+        in
+        constrain_modtype env constr mty
+      in
+      MtyL_ident (p, Nominal.add nom [constr] constrain)
   | MtyL_alias p ->
       let p = Env.normalize_module_path (Some Location.none) env p in
       let mty = (Env.find_module_lazy p env).mdl_type in
@@ -519,8 +523,8 @@ and expand_lazy_modtype_with env p nom =
       | _ -> ()
       end;
       r end
-    else match Nominal.signature nom with
-      | Some sg -> Some (Subst.Lazy.MtyL_signature sg)
+    else match Nominal.equivalent_type nom with
+      | Some mty -> Some mty
       | None -> expand ()
 
 
@@ -591,7 +595,18 @@ type variance = Co | Contra | Strict
 let rec nondep_mty_with_presence env va ids pres mty =
   match mty with
     Mty_ident (p, nom) ->
-      begin match Nominal.signature nom with
+      begin match Path.find_free_opt ids p with
+      | None when Nominal.is_empty nom -> pres, mty
+      | r ->
+        begin match expand_modtype_with env p nom with
+        | Some expansion -> nondep_mty_with_presence env va ids pres expansion
+        | None -> match r with
+          | Some id -> raise (Ctype.Nondep_cannot_erase id)
+          | None -> assert false (* RL: FIXME *)
+        end
+      end
+      (*
+      begin match Nominal.equivalent_type nom with
       | None -> 
         begin match Path.find_free_opt ids p with
         | Some id ->
@@ -604,7 +619,7 @@ let rec nondep_mty_with_presence env va ids pres mty =
         | None -> pres, mty
         end
       
-      | Some sg ->
+      | Some mty ->
         let dep_id p = Option.is_some (Path.find_free_opt ids p) in
         let dep_with = function
           | _, Nominal.Nmc_module p -> dep_id (Nominal.untyped_path p)
@@ -612,9 +627,10 @@ let rec nondep_mty_with_presence env va ids pres mty =
           | _, Nominal.Nmc_type p -> dep_id p
         in
         if dep_id p || List.exists dep_with (Nominal.constraints nom)
-          then pres, Mty_signature (nondep_sig env va ids sg)
+          then nondep_mty_with_presence env va ids pres mty
           else pres, Mty_ident (p, nom)
       end
+      *)
   | Mty_alias p ->
       begin match Path.find_free_opt ids p with
       | Some id ->
@@ -747,11 +763,13 @@ and enrich_item env p = function
 
 let rec type_paths env p mty =
   match scrape env mty with
-    Mty_ident (p,nom) ->
-    begin match Nominal.signature nom with
-    | Some sg -> type_paths_sig env p sg
+    Mty_ident _ -> [] (* RL: FIXME I think this is ok? *)
+    (*
+    begin match Nominal.equivalent_type nom with
+    | Some sg -> type_paths env p sg
     | None -> []
     end
+    *)
   | Mty_alias _ -> []
   | Mty_signature sg -> type_paths_sig env p sg
   | Mty_functor _ -> []
@@ -777,8 +795,8 @@ let rec no_code_needed_mod env pres mty =
   | Mp_present -> begin
       match scrape env mty with
         Mty_ident (_, nom) ->
-          begin match Nominal.signature nom with
-          | Some sg -> no_code_needed_sig env sg
+          begin match Nominal.equivalent_type nom with
+          | Some sg -> no_code_needed_mod env pres sg
           | None -> false
           end
       | Mty_signature sg -> no_code_needed_sig env sg
@@ -809,14 +827,14 @@ let no_code_needed env mty = no_code_needed_mod env Mp_present mty
 
 let rec contains_type env = function
     Mty_ident (path, nom) ->
-      begin match Nominal.signature nom with
+      begin match Nominal.equivalent_type nom with
         | None ->
           begin try match (Env.find_modtype path env).mtd_type with
           | None -> raise Exit (* PR#6427 *)
           | Some mty -> contains_type env mty
           with Not_found -> raise Exit
           end
-        | Some sg -> contains_type_sig env sg
+        | Some mty -> contains_type env mty
       end
   | Mty_signature sg ->
       contains_type_sig env sg
@@ -896,23 +914,22 @@ let collect_arg_paths mty =
   let it_path p = paths := Path.Set.union (get_arg_paths p) !paths
   and it_signature_item it si =
     type_iterators.it_signature_item it si;
+    let rec it_module_type id = function
+      | Mty_alias p ->
+          bindings := Ident.add id p !bindings
+      | Mty_signature sg ->
+          List.iter
+            (function Sig_module (id', _, _, _, _) ->
+                subst :=
+                  Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
+              | _ -> ())
+            sg
+      | Mty_ident (_,nom) ->
+          Nominal.equivalent_type nom |> Option.iter (it_module_type id)
+      | _ -> ()
+    in
     match si with
-    | Sig_module (id, _, {md_type=Mty_alias p}, _, _) ->
-        bindings := Ident.add id p !bindings
-    | Sig_module (id, _, {md_type=Mty_signature sg}, _, _) ->
-        List.iter
-          (function Sig_module (id', _, _, _, _) ->
-              subst :=
-                Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
-            | _ -> ())
-          sg
-    | Sig_module (id, _, {md_type=Mty_ident (_,nom)}, _, _) ->
-      Nominal.signature nom |> Option.iter
-        (List.iter
-          (function Sig_module (id', _, _, _, _) ->
-              subst :=
-                Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
-            | _ -> ()))
+    | Sig_module (id, _, {md_type=mty}, _, _) -> it_module_type id mty
     | _ -> ()
   in
   let it = {type_iterators with it_path; it_signature_item} in
@@ -933,7 +950,8 @@ let rec remove_aliases_mty env args pres mty =
       Mty_signature sg ->
         Mp_present, Mty_signature (remove_aliases_sig env args' sg)
     | Mty_ident (p,nom) ->
-        Mp_present, Mty_ident (p, Nominal.map_signature (remove_aliases_sig env args') nom)
+        Mp_present, Mty_ident (p, Nominal.map_equivalent_type (
+          fun mty -> remove_aliases_mty env args' pres mty |> snd) nom)
     | Mty_alias _ ->
         let mty' = Env.scrape_alias env mty in
         if mty' = mty then begin

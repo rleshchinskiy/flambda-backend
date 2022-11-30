@@ -378,8 +378,8 @@ let rec trim_signature = function
              | item -> item)
            sg)
   | Mty_ident (_,nom) as mty ->
-    begin match Nominal.signature nom with
-    | Some sg -> trim_signature (Mty_signature sg)
+    begin match Nominal.equivalent_type nom with
+    | Some mty -> trim_signature mty
     | None -> mty
     end
   | mty -> mty

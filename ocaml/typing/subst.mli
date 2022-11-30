@@ -105,7 +105,7 @@ module Lazy : sig
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
 
-  and nominal = (modtype, signature) Types.Nominal.nominal
+  and nominal = modtype Types.Nominal.nominal
 
   and modtype_declaration =
     {

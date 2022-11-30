@@ -395,7 +395,7 @@ let retrieve_functor_params env mty =
   let rec retrieve_functor_params before env =
     function
     | Mty_ident (p, nom) as res ->
-        begin match Nominal.signature nom with
+        begin match Nominal.equivalent_type nom with
         | Some _ -> List.rev before, res
         | None -> begin match expand_modtype_path env p with
           | Some mty -> retrieve_functor_params before env mty
