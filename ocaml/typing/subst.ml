@@ -30,6 +30,7 @@ type t =
   { types: type_replacement Path.Map.t;
     modules: Path.t Path.Map.t;
     modtypes: module_type Path.Map.t;
+    modargs: module_type Path.Map.t;
     for_saving: bool;
     loc: Location.t option;
   }
@@ -38,6 +39,7 @@ let identity =
   { types = Path.Map.empty;
     modules = Path.Map.empty;
     modtypes = Path.Map.empty;
+    modargs = Path.Map.empty;
     for_saving = false;
     loc = None;
   }
@@ -50,6 +52,9 @@ let add_type_function id ~params ~body s =
 
 let add_module_path id p s = { s with modules = Path.Map.add id p s.modules }
 let add_module id p s = add_module_path (Pident id) p s
+let add_module_arg id p mty s =
+  let s = add_module id p s in
+  { s with modargs = Path.Map.add (Pident id) mty s.modargs }
 
 let add_modtype_path p ty s = { s with modtypes = Path.Map.add p ty s.modtypes }
 let add_modtype id ty s = add_modtype_path (Pident id) ty s
@@ -570,9 +575,45 @@ and lazy_nominal nom = Nominal.map lazy_modtype (fun sg -> Lazy_backtrack.create
 
 and force_nominal nom = Nominal.map force_modtype force_signature nom
 
-and subst_lazy_nominal scoping s nom =
-  Nominal.map_paths (module_path s) (type_path s) nom
-  |> Nominal.map (subst_lazy_modtype scoping s) (subst_lazy_signature scoping s)
+and subst_lazy_nominal scoping s =
+  let open Types.Nominal in
+  let rec module_arg s path =
+    match Path.Map.find_opt path s.modules with
+    | Some new_path ->
+        begin match Path.Map.find_opt path s.modargs with
+        | Some mty -> Nominal.Nmty_strengthened (new_path, lazy_modtype mty)
+        | None -> Nominal.Nmty_of new_path
+      end
+    | None ->
+      match path with
+      | Pident _ -> Nominal.Nmty_of path
+      | Pdot (p, n) ->
+        begin match module_arg s p with
+        | Nominal.Nmty_of q -> Nominal.Nmty_of (Pdot (q,n))
+        | q -> Nominal.Nmty_dot (q,n)
+        end
+      | Papply (p1,p2) ->
+        let p2 = module_path s p2 in
+        begin match module_arg s p1 with
+        | Nominal.Nmty_of q -> Nominal.Nmty_of (Papply (q,p2))
+        | q -> Nominal.Nmty_apply (q,p2)
+        end
+  in
+  let rec typed_path = function
+    | Nmty_of p -> module_arg s p
+    | Nmty_strengthened (p,mty) ->
+        let mty = subst_lazy_modtype scoping s mty in
+        Nmty_strengthened (module_path s p, mty)
+    | Nmty_dot (p,s) -> Nmty_dot (typed_path p,s)
+    | Nmty_apply (p,q) -> Nmty_apply (typed_path p, module_path s q)
+  in
+  let definition = function
+    | Nmc_module p -> Nmc_module (typed_path p)
+    | Nmc_strengthen (p,a) -> Nmc_strengthen (module_path s p, a)
+    | Nmc_type p -> Nmc_type (type_path s p)
+  in
+  let module_constraint (ns,def) = (ns, definition def) in
+  map_nominal module_constraint (subst_lazy_signature scoping s)
 
 and lazy_modtype = function
   | Mty_ident (p, nom) -> MtyL_ident (p, lazy_nominal nom)
@@ -737,6 +778,7 @@ and compose s1 s2 =
   { types = merge_path_maps (type_replacement s2) s1.types s2.types;
     modules = merge_path_maps (module_path s2) s1.modules s2.modules;
     modtypes = merge_path_maps (modtype Keep s2) s1.modtypes s2.modtypes;
+    modargs = merge_path_maps (modtype Keep s2) s1.modargs s2.modargs;
     for_saving = s1.for_saving || s2.for_saving;
     loc = keep_latest_loc s1.loc s2.loc;
   }

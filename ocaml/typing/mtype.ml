@@ -309,7 +309,67 @@ and constrain_sig_item env constr item =
     );
     SigL_module (id, pres, str, rs, vis)
 
-  | ([s], Nominal.Nmc_module p), SigL_module(id, pres, _, rs, vis) when Ident.name id = s ->
+  | ([s], Nominal.Nmc_module p), SigL_module(id, pres, md, rs, vis) when Ident.name id = s ->
+    let open Nominal in
+    let pick s = function
+      | (SigL_module(id, _, md, _, _)) when Ident.name id = s -> Some md.mdl_type
+      | _ -> None
+    in
+    let project_item s = List.find_map (pick s) in
+    let rec project s = function
+      | MtyL_alias p -> MtyL_alias (Path.Pdot (p,s))
+      | MtyL_ident (p,nom) when Nominal.is_empty nom ->
+          MtyL_ident (Path.Pdot (p,s), nom)
+      | MtyL_ident (p,nom) ->
+          begin match expand_lazy_modtype_with env p nom with
+          | Some mty -> project s mty
+          | None -> assert false
+          end
+      | MtyL_functor _ -> assert false
+      | MtyL_signature sg ->
+          let items = Subst.Lazy.force_signature_once sg in
+          begin match project_item s items with
+          | Some mty -> mty
+          | None -> assert false
+          end
+    in
+    let rec apply arg = function
+      | MtyL_alias p -> MtyL_alias (Path.Papply (p,arg))
+      | MtyL_ident (p,nom) when Nominal.is_empty nom ->
+          MtyL_ident (Path.Papply(p,arg), nom)
+      | MtyL_ident (p,nom) ->
+          begin match expand_lazy_modtype_with env p nom with
+          | Some mty -> apply arg mty
+          | None -> assert false
+          end
+      | MtyL_functor (_param,_mty) -> assert false (* RL: FIXME *)
+      | MtyL_signature _ -> assert false
+    in
+    let rec compute = function
+      | Nmty_of p ->
+          let md = Env.find_module_lazy p env in
+          let _, mty = scrape_for_lazy_type_of env Mp_present md.mdl_type in
+          let md = { md with mdl_type = mty } in
+          let str =
+              strengthen_lazy_decl ~aliasable:false env md p in
+          str
+      | Nmty_strengthened (p,mty) ->
+          let md = { md with mdl_type = mty } in
+          let str =
+              strengthen_lazy_decl ~aliasable:false env md p in
+          str
+      | Nmty_dot (p,s) ->
+          let md = compute p in
+          let mty = project s md.mdl_type
+          in
+          { md with mdl_type = mty }
+      | Nmty_apply (p,q) ->
+          let md = compute p in
+          let mty = apply q md.mdl_type
+          in
+          { md with mdl_type = mty }
+    in
+    (*
     let p = Nominal.untyped_path p in
     let md = Env.find_module_lazy p env in
     if rl_debugging then (
@@ -324,6 +384,8 @@ and constrain_sig_item env constr item =
     let str =
         strengthen_lazy_decl ~aliasable:false env md p
     in
+    *)
+    let str = compute p in
     if rl_debugging then (
       Format.printf "@[<hv 2>constrain@ %a@ %a@]@."
         Printtyp.modtype (force_modtype md.mdl_type)
@@ -408,7 +470,7 @@ and constrain_sig_item env constr item =
 
     | _, sigelt -> sigelt
 
-let expand_lazy_modtype_with env p nom =
+and expand_lazy_modtype_with env p nom =
   let expand () =
     match Env.find_modtype_expansion_lazy p env with
     | mty -> Some mty

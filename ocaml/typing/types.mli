@@ -633,6 +633,7 @@ module Nominal : sig
   val map_signature : ('s -> 's) -> ('a,'s) nominal -> ('a,'s) nominal
   val map : ('a -> 'b) -> ('s -> 't) -> ('a,'s) nominal -> ('b,'t) nominal
   val map_paths : (Path.t -> Path.t) -> (Path.t -> Path.t) -> ('a,'s) nominal -> ('a,'s) nominal
+  val map_nominal : ('a module_constraint -> 'a module_constraint) -> ('s -> 's) -> ('a,'s) nominal -> ('a,'s) nominal
   val add : ('a,'s) nominal -> 'a module_constraint list -> 's -> ('a,'s) nominal
   val append : ('a,'s) nominal -> ('a,'s) nominal -> ('a,'s) nominal
 

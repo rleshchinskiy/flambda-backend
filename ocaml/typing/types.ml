@@ -395,6 +395,8 @@ module Nominal = struct
     let map_module_constraint f g (ns,def) = (ns, map_definition f g def) in
     Option.map (fun(cs,sg) -> (List.map (map_module_constraint f g) cs, sg))  
 
+  let map_nominal f g = Option.map (fun (cs,sg) -> (List.map f cs, g sg))
+
   let add nom cs sg = match nom with
   | None -> Some (cs,sg)
   | Some (ds,_) -> Some (ds @ cs, sg)
