@@ -385,8 +385,10 @@ let type_iterators =
             | _, Nominal.Nmc_strengthen (p,_) -> it.it_path p
             | _, Nominal.Nmc_type p -> it.it_path p
           )
-          (Nominal.constraints nom);
-        Option.iter (it.it_signature it) (Nominal.signature nom)
+          (Nominal.constraints nom)
+      (*
+          ;
+        Option.iter (it.it_signature it) (Nominal.signature nom) *)
     | Mty_alias p -> it.it_path p
     | Mty_signature sg -> it.it_signature it sg
     | Mty_functor (p, mt) ->

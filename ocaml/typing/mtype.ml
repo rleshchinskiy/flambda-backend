@@ -154,8 +154,6 @@ and strengthen_lazy_decl ~aliasable env md p =
   );
   md'
 
-let () = Env.strengthen := strengthen_lazy
-
 let strengthen ~aliasable env mty p =
   let mty' = strengthen_lazy ~aliasable env (Subst.Lazy.of_modtype mty) p in
   let mty'' = Subst.Lazy.force_modtype mty' in
@@ -342,7 +340,33 @@ and constrain_sig_item env constr item =
           | Some mty -> apply arg mty
           | None -> assert false
           end
-      | MtyL_functor (_param,_mty) -> assert false (* RL: FIXME *)
+      | MtyL_functor (param, mty_res) ->
+          begin match param with
+          | Named (id, mty_param) ->
+            let scope = Ctype.create_scope () in
+            let subst = match id with
+              | None -> Subst.identity
+              | Some p ->
+                  let mty_param = Subst.Lazy.force_modtype mty_param in
+                  Subst.add_module_arg p arg mty_param Subst.identity
+            in
+            Subst.Lazy.modtype (Rescope scope) subst mty_res 
+          | Unit -> assert false (* RL : FIXME *)
+          end
+(*        | Some path ->
+            let scope = Ctype.create_scope () in
+            let subst =
+              match param with
+              | None -> Subst.identity
+              | Some p -> Subst.add_module_arg p path mty_param Subst.identity
+            in
+            let mty_res' = Subst.modtype (Rescope scope) subst mty_res in
+            if rl_debugging then (
+              Format.printf "@[<hv 2>tyapp subst@ %a@ %a@]@."
+                Printtyp.modtype mty_res
+                Printtyp.modtype mty_res'
+            );
+            mty_res'*)        
       | MtyL_signature _ -> assert false
     in
     let rec compute = function
@@ -553,6 +577,10 @@ let unfold_signature env subst ~aliasable sg =
   if rl_with then sg' else Signature.unpack sg
 *)
   
+let () =
+  Env.strengthen := strengthen_lazy ;
+  Env.expand_lazy_modtype_with := expand_lazy_modtype_with
+
 
 (* In nondep_supertype, env is only used for the type it assigns to id.
    Hence there is no need to keep env up-to-date by adding the bindings
@@ -696,8 +724,11 @@ let rec enrich_modtype env p mty =
   match mty with
     Mty_signature sg ->
       Mty_signature(List.map (enrich_item env p) sg)
-  | Mty_ident (p,nom) ->
-      Mty_ident (p, Nominal.map_signature (List.map (enrich_item env p)) nom)
+  | Mty_ident (id,nom) when not (Nominal.is_empty nom) ->
+      begin match expand_modtype_with env id nom with
+      | Some mty -> enrich_modtype env p mty
+      | None -> mty
+      end
   | _ ->
       mty
 

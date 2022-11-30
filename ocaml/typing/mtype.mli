@@ -35,6 +35,7 @@ val strengthen: aliasable:bool -> Env.t -> module_type -> Path.t -> module_type
 val strengthen_decl:
   aliasable:bool -> Env.t -> module_declaration -> Path.t -> module_declaration
 
+val expand_lazy_modtype_with : Env.t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option
 val expand_modtype_with : Env.t -> Path.t -> nominal -> module_type option
 
 val sig_make_manifest : signature -> signature
