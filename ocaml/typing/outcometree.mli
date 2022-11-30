@@ -117,16 +117,21 @@ type out_with_kind =
   | Owk_user of bool
   | Owk_strengthen of bool
 
-type out_nominal_with =
-  | Onom_with_module of string * out_ident * out_with_kind
-  | Onom_with_type of string * out_ident
-
 type out_module_type =
   | Omty_abstract
   | Omty_functor of (string option * out_module_type) option * out_module_type
-  | Omty_ident of out_ident * (out_nominal_with list * out_sig_item list) option
+  | Omty_ident of out_ident * (out_module_constraint list * out_sig_item list) option
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
+and out_typed_path =
+  | Otp_of of out_ident
+  | Otp_strengthened of out_ident * out_module_type
+  | Otp_dot of out_typed_path * string
+  | Otp_apply of out_typed_path * out_ident
+and out_module_constraint =
+  | Omc_module of string list * out_typed_path
+  | Omc_strengthen of string list * out_ident * bool
+  | Omc_type of string list * out_ident
 and out_sig_item =
   | Osig_class of
       bool * string * out_type_param list * out_class_type *

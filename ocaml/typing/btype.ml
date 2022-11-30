@@ -381,8 +381,9 @@ let type_iterators =
         it.it_path p;
         List.iter
           (function
-            | Nom_with_module (_, p, _) -> it.it_path p
-            | Nom_with_type (_, p) -> it.it_path p
+            | _, Nominal.Nmc_module p -> it.it_path (Nominal.untyped_path p)
+            | _, Nominal.Nmc_strengthen (p,_) -> it.it_path p
+            | _, Nominal.Nmc_type p -> it.it_path p
           )
           (Nominal.constraints nom);
         Option.iter (it.it_signature it) (Nominal.signature nom)

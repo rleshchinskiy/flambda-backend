@@ -460,7 +460,7 @@ module Lazy_types = struct
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
 
-  and nominal = nominal_with list * signature option
+  and nominal = (modtype, signature) Types.Nominal.nominal
 
   and modtype_declaration =
     {
@@ -566,23 +566,13 @@ and force_module_decl md =
     md_attributes = md.mdl_attributes;
     md_loc = md.mdl_loc;
     md_uid = md.mdl_uid }
+and lazy_nominal nom = Nominal.map lazy_modtype (fun sg -> Lazy_backtrack.create_forced (S_eager sg)) nom
 
-and lazy_nominal nom =
-  match Nominal.signature nom with
-  | None -> ([], None)
-  | Some sg -> (Nominal.constraints nom, Some (Lazy_backtrack.create_forced (S_eager sg)))
+and force_nominal nom = Nominal.map force_modtype force_signature nom
 
-and force_nominal (cs,sg) =
-  match sg with
-  | None -> Nominal.empty
-  | Some sg -> Nominal.make cs (force_signature sg)
-
-and subst_lazy_nominal scoping s (cs, sg) =
-  let rename_with = function
-    | Nom_with_module (p,q,a) -> Nom_with_module (p, module_path s q, a)
-    | Nom_with_type (p,q) -> Nom_with_type (p, type_path s q)
-  in
-  (List.map rename_with cs, Option.map (subst_lazy_signature scoping s) sg)
+and subst_lazy_nominal scoping s nom =
+  Nominal.map_paths (module_path s) (type_path s) nom
+  |> Nominal.map (subst_lazy_modtype scoping s) (subst_lazy_signature scoping s)
 
 and lazy_modtype = function
   | Mty_ident (p, nom) -> MtyL_ident (p, lazy_nominal nom)
@@ -598,11 +588,10 @@ and subst_lazy_modtype scoping s = function
       let nom = subst_lazy_nominal scoping s nom in
       begin match Path.Map.find p s.modtypes with
        | mty ->
-          begin match nom, mty with
-          | (_, None), mty -> lazy_modtype mty
-          | (cs, Some sg), Mty_ident (q, qnom) ->
-              MtyL_ident (q, (Nominal.constraints qnom @ cs, Some sg))
-          | _, _ -> assert false
+          begin match mty with
+          | Mty_ident (q, qnom) ->
+              MtyL_ident (q, Nominal.append (lazy_nominal qnom) nom)
+          | mty -> lazy_modtype mty
           end
        | exception Not_found ->
           begin match p with
@@ -759,24 +748,6 @@ let subst_lazy_signature_item scoping s comp =
 
 module Lazy = struct
   include Lazy_types
-
-  module Nominal = struct
-    let empty = ([], None)
-
-    let is_empty (_, sg) = Option.is_none sg
-
-    let signature (_,sg) = sg
-
-    let add (cs, _) ds sg = (cs @ ds, Some sg)
-
-    let map_signature f (cs,sg) =
-      let apply sg =
-        let sg = f (force_signature_once sg)
-        in 
-        Lazy_backtrack.create_forced (S_lazy sg)
-      in
-      (cs, Option.map apply sg)
-  end
 
   let of_module_decl = lazy_module_decl
   let of_modtype = lazy_modtype

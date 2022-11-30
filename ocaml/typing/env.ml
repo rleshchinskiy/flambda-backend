@@ -1449,7 +1449,7 @@ let rec normalize_modtype_path env path =
 
 and expand_modtype_path env path =
   match (find_modtype_lazy path env).mtdl_type with
-  | Some (MtyL_ident (path, nom)) when Subst.Lazy.Nominal.is_empty nom -> normalize_modtype_path env path
+  | Some (MtyL_ident (path, nom)) when Nominal.is_empty nom -> normalize_modtype_path env path
   | _ | exception Not_found -> path
 
 let find_module path env =
@@ -1658,7 +1658,7 @@ let find_shadowed_types path env =
 let rec scrape_alias env ?path mty =
   let open Subst.Lazy in
   match mty, path with
-    MtyL_ident (p, nom), _ when Subst.Lazy.Nominal.is_empty nom ->
+    MtyL_ident (p, nom), _ when Nominal.is_empty nom ->
       (* RL: FIXME *)
       begin try
         scrape_alias env (find_modtype_expansion_lazy p env) ?path
@@ -1959,7 +1959,7 @@ let rec components_of_module_maker
   in
   match scrape_alias cm_env cm_mty with
   | MtyL_ident (_,nom) as mty ->
-      begin match Subst.Lazy.Nominal.signature nom with
+      begin match Nominal.signature nom with
       | Some sg -> components (Subst.Lazy.MtyL_signature sg)
       | None -> components mty
       end

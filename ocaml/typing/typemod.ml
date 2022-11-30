@@ -768,7 +768,8 @@ let merge_constraint initial_env loc sg lid constr =
                 Printtyp.path wm.path
                 Printtyp.modtype wm.md.md_type
             );
-            Some (Nom_with_module (namelist, wm.path, Wkind_user wm.remove_aliases))
+            assert (not wm.remove_aliases);
+            Some (namelist, Nominal.Nmc_module (Nominal.Nmty_of wm.path))
         | _ -> None
         in
         x, nom, sg
@@ -2484,7 +2485,13 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
               | None -> Subst.identity
               | Some p -> Subst.add_module p path Subst.identity
             in
-            Subst.modtype (Rescope scope) subst mty_res
+            let mty_res' = Subst.modtype (Rescope scope) subst mty_res in
+            if rl_debugging then (
+              Format.printf "@[<hv 2>tyapp subst@ %a@ %a@]@."
+                Printtyp.modtype mty_res
+                Printtyp.modtype mty_res'
+            );
+            mty_res'
         | None ->
             let env, nondep_mty =
               match param with
@@ -2518,9 +2525,10 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
             nondep_mty
       in
       if rl_debugging then (
-        Format.printf "@[<hv 2>typeapp@ %a@ to %a@ = %a@]@."
+        Format.printf "@[<hv 2>typeapp@ %a@ to %a@ at %a@ = %a@]@."
         Printtyp.modtype mty_functor
         Printtyp.modtype app_view.arg.mod_type
+        Printtyp.modtype mty_param
         Printtyp.modtype mty_appl
       );
       check_well_formed_module env apply_loc

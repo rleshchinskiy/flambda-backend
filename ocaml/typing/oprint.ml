@@ -620,26 +620,44 @@ and print_simple_out_module_type ppf =
       in
       begin match nom with
       | Some (constrs, sg)  ->
-         let rec print_constrs sep ppf = function
+        let rec print_typed_path ppf = function
+        | Otp_of id -> print_ident ppf id
+        | Otp_strengthened (id,mty) ->
+            fprintf ppf "(%a/%a)"
+              print_ident id
+              print_out_module_type mty
+        | Otp_dot (p,s) ->
+            fprintf ppf "%a.%s"
+              print_typed_path p
+              s
+        | Otp_apply (p,q) ->
+            fprintf ppf "%a(%a)"
+              print_typed_path p
+              print_ident q
+        in
+        let dotted ns = String.concat "." ns in
+        let print_constr ppf = function
+        | Omc_module (ns,p) ->
+            fprintf ppf "module %s = %a"
+              (dotted ns)
+              print_typed_path p
+        | Omc_strengthen (ns,p,a) ->
+            fprintf ppf "module %s %s %a"
+              (dotted ns)
+              (if a then "@=" else "*=")
+              print_ident p
+        | Omc_type (ns,p) ->
+            fprintf ppf "type %s = %a"
+              (dotted ns)
+              print_ident p
+        in
+        let rec print_constrs sep ppf = function
            | [] -> ()
-           | Onom_with_module (l,r,k) :: constrs ->
-              let eq = match k with
-              | Owk_user _ -> "="
-              | Owk_strengthen true -> "@="
-              | Owk_strengthen false -> "*="
-              in
-              fprintf ppf "@ %s module %s %s %a%a"
+           | c :: cs -> 
+              fprintf ppf "@ %s %a%a"
                 sep
-                l
-                eq
-                print_ident r
-                (print_constrs "and") constrs
-           | Onom_with_type (l,r) :: constrs ->
-              fprintf ppf "@ %s type %s = %a%a"
-                sep
-                l
-                print_ident r
-                (print_constrs "and") constrs
+                print_constr c
+                (print_constrs "and") cs
          in
          fprintf ppf "@[<hv 2>%a%a@ ==>@ %a@;<1 -2>@]"
           print_ident id (print_constrs "with") constrs

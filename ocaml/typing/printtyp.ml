@@ -1898,6 +1898,7 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       let mk_ident nom = Omty_ident (tree_of_path Module_type p, nom) in
       begin match Types.Nominal.signature nom with
         | Some sg when rl_print_with ->
+            (*
             let mk_with = function
               | Types.Nom_with_module (ns, p, k) ->
                   let kind = match k with
@@ -1908,6 +1909,20 @@ let rec tree_of_modtype ?(ellipsis=false) = function
               | Types.Nom_with_type (ns, p) ->
                   Onom_with_type (String.concat "." ns, tree_of_path Type p)
               in
+            *)
+            let rec mk_path = function
+            | Types.Nominal.Nmty_of p -> Otp_of (tree_of_path Module p)
+            | Types.Nominal.Nmty_strengthened (p,mty) ->
+                Otp_strengthened (tree_of_path Module p, tree_of_modtype ~ellipsis mty)
+            | Types.Nominal.Nmty_dot (p,s) -> Otp_dot (mk_path p, s)
+            | Types.Nominal.Nmty_apply (p,q) -> Otp_apply (mk_path p, tree_of_path Module q)
+            in
+            let mk_with = function
+              | ns, Types.Nominal.Nmc_module p -> Omc_module (ns, mk_path p)
+              | ns, Types.Nominal.Nmc_strengthen (p,a) ->
+                  Omc_strengthen (ns, tree_of_path Module p, a)
+              | ns, Types.Nominal.Nmc_type p -> Omc_type (ns, tree_of_path Type p)
+            in
             (mk_ident (Some (List.map mk_with (Types.Nominal.constraints nom), tree_of_signature sg)))
         | Some sg ->
             (Omty_signature (if ellipsis then [Osig_ellipsis]

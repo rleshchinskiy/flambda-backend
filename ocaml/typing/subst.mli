@@ -104,7 +104,7 @@ module Lazy : sig
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
 
-  and nominal
+  and nominal = (modtype, signature) Types.Nominal.nominal
 
   and modtype_declaration =
     {
@@ -130,15 +130,6 @@ module Lazy : sig
   and functor_parameter =
     | Unit
     | Named of Ident.t option * modtype
-
-  module Nominal : sig
-    val empty : nominal
-    val is_empty : nominal -> bool
-    val signature : nominal -> signature option
-    val add : nominal -> nominal_with list -> signature -> nominal
-    val map_signature : (signature_item list -> signature_item list) -> nominal -> nominal
-  end
-
 
   val of_module_decl : Types.module_declaration -> module_decl
   val of_modtype : Types.module_type -> modtype

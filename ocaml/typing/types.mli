@@ -602,13 +602,44 @@ type aliasability =
   | Aliasable
   | NotAliasable
 
-type with_kind =
-  | Wkind_user of bool (* remove aliases *)
-  | Wkind_strengthen of bool (* aliasable *)
+(*
+type 'a nmty =
+  | Nt_alias of Path.t (* alias to path IF NOT AN ALIAS ALREADY *)
+  | Nt_strenghten of Path.t (* strengthen found decl with path, not aliasable *)
+  | Nt_typeof of Path.t (* set type to strengthened decl of path *)
+  | Nt_typed of Path.t * 'a (* set type to 'a strengthend to Path.t *)
+*)
 
-type nominal_with =
-  | Nom_with_module of string list * Path.t * with_kind
-  | Nom_with_type of string list * Path.t
+module Nominal : sig
+  type 'a typed_path =
+    | Nmty_of of Path.t (* module type of struct include M end *)
+    | Nmty_strengthened of Path.t * 'a (* 'a strengthend to Path.t *)
+    | Nmty_dot of 'a typed_path * string
+    | Nmty_apply of 'a typed_path * Path.t
+
+  type 'a definition =
+    | Nmc_module of 'a typed_path
+    | Nmc_strengthen of Path.t * bool
+    | Nmc_type of Path.t
+
+  type 'a module_constraint = string list * 'a definition
+
+  type ('a,'s) nominal
+
+  val empty : ('a,'s) nominal
+  val is_empty : ('a,'s) nominal -> bool
+  val constraints : ('a,'s) nominal -> 'a module_constraint list
+  val signature : ('a,'s) nominal -> 's option
+  val map_signature : ('s -> 's) -> ('a,'s) nominal -> ('a,'s) nominal
+  val map : ('a -> 'b) -> ('s -> 't) -> ('a,'s) nominal -> ('b,'t) nominal
+  val map_paths : (Path.t -> Path.t) -> (Path.t -> Path.t) -> ('a,'s) nominal -> ('a,'s) nominal
+  val add : ('a,'s) nominal -> 'a module_constraint list -> 's -> ('a,'s) nominal
+  val append : ('a,'s) nominal -> ('a,'s) nominal -> ('a,'s) nominal
+
+  val make : 'a module_constraint list -> 's -> ('a,'s) nominal
+
+  val untyped_path : 'a typed_path -> Path.t
+end
 
 type module_type =
     Mty_ident of Path.t * nominal
@@ -616,7 +647,7 @@ type module_type =
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
 
-and nominal
+and nominal = (module_type, signature) Nominal.nominal
 
 and functor_parameter =
   | Unit
@@ -664,16 +695,7 @@ and ext_status =
   | Text_next                      (* not first constructor in an extension *)
   | Text_exception
 
-module Nominal : sig
-  val empty : nominal
-  val is_empty : nominal -> bool
-  val constraints : nominal -> nominal_with list
-  val signature : nominal -> signature option
-  val map_signature : (signature -> signature) -> nominal -> nominal
-  val add : nominal -> nominal_with list -> signature -> nominal
-
-  val make : nominal_with list -> signature -> nominal
-end
+type module_constraint = module_type Nominal.module_constraint
 
 val item_visibility : signature_item -> visibility
 

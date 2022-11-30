@@ -333,13 +333,80 @@ type aliasability =
   | Aliasable
   | NotAliasable
 
-type with_kind =
-  | Wkind_user of bool (* remove aliases *)
-  | Wkind_strengthen of bool (* aliasable *)
+module Nominal = struct
+  type 'a typed_path =
+    | Nmty_of of Path.t (* module type of struct include M end *)
+    | Nmty_strengthened of Path.t * 'a (* 'a strengthend to Path.t *)
+    | Nmty_dot of 'a typed_path * string
+    | Nmty_apply of 'a typed_path * Path.t
 
-type nominal_with =
-  | Nom_with_module of string list * Path.t * with_kind
-  | Nom_with_type of string list * Path.t
+  type 'a definition =
+    | Nmc_module of 'a typed_path
+    | Nmc_strengthen of Path.t * bool
+    | Nmc_type of Path.t
+
+  type 'a module_constraint = string list * 'a definition
+
+  type ('a,'s) nominal = ('a module_constraint list * 's) option
+
+  let rec untyped_path = function
+  | Nmty_of p -> p
+  | Nmty_strengthened (p,_) -> p
+  | Nmty_dot (p,s) -> Path.Pdot (untyped_path p, s)
+  | Nmty_apply (p,q) -> Path.Papply (untyped_path p, q)
+
+  let empty = None
+  let is_empty = Option.is_none
+
+  let constraints = function
+  | Some (cs,_) -> cs
+  | None -> []
+
+  let signature nom = Option.map snd nom
+
+  let map_signature f = Option.map (fun (cs,sg) -> (cs, f sg))
+
+  let map f g =
+    let rec map_typed_path f = function
+    | Nmty_of p -> Nmty_of p
+    | Nmty_strengthened (p,t) -> Nmty_strengthened (p,f t)
+    | Nmty_dot (p,s) -> Nmty_dot (map_typed_path f p,s)
+    | Nmty_apply (p,q) -> Nmty_apply (map_typed_path f p, q)
+    in
+    let map_definition f = function
+    | Nmc_module p -> Nmc_module (map_typed_path f p)
+    | Nmc_strengthen _ | Nmc_type _ as x -> x
+    in
+    let map_module_constraint f (ns,def) = (ns, map_definition f def) in
+    Option.map (fun(cs,sg) -> (List.map (map_module_constraint f) cs, g sg))
+
+  let map_paths f g =
+    let rec map_typed_path f = function
+    | Nmty_of p -> Nmty_of (f p)
+    | Nmty_strengthened (p,t) -> Nmty_strengthened (f p,t)
+    | Nmty_dot (p,s) -> Nmty_dot (map_typed_path f p,s)
+    | Nmty_apply (p,q) -> Nmty_apply (map_typed_path f p, f q)
+    in
+    let map_definition f g = function
+    | Nmc_module p -> Nmc_module (map_typed_path f p)
+    | Nmc_strengthen (p,a) -> Nmc_strengthen (f p, a)
+    | Nmc_type p -> Nmc_type (g p)
+    in
+    let map_module_constraint f g (ns,def) = (ns, map_definition f g def) in
+    Option.map (fun(cs,sg) -> (List.map (map_module_constraint f g) cs, sg))  
+
+  let add nom cs sg = match nom with
+  | None -> Some (cs,sg)
+  | Some (ds,_) -> Some (ds @ cs, sg)
+
+  let append nom1 nom2 =
+    match nom1, nom2 with
+    | Some (cs,_), Some (ds,sg) -> Some (cs @ ds, sg)
+    | None, nom -> nom
+    | nom, None -> nom
+
+  let make cs sg = Some (cs,sg)
+end
 
 type module_type =
     Mty_ident of Path.t * nominal
@@ -347,7 +414,7 @@ type module_type =
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
 
-and nominal = nominal_with list * signature
+and nominal = (module_type, signature) Nominal.nominal
 
 and functor_parameter =
   | Unit
@@ -396,26 +463,7 @@ and ext_status =
   | Text_exception                 (* an exception *)
 
 
-module Nominal = struct
-  let empty = ([], [])
-  let is_empty = function
-    | ([], _) -> true
-    | _ -> false
-
-  let constraints (cs,_) = cs
-  let signature = function
-    | ([], _) -> None
-    | (_, sg) -> Some sg
-
-  let map_signature f = function
-    | ([], sg) -> ([], sg)
-    | (cs, sg) -> (cs, f sg)
-
-  let add nom cs sg = (constraints nom @ cs, sg)
-
-  let make cs sg = (cs,sg)
-end
-  
+type module_constraint = module_type Nominal.module_constraint  
 
 (* Constructor and record label descriptions inserted held in typing
    environments *)
