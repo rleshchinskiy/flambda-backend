@@ -605,32 +605,6 @@ let rec nondep_mty_with_presence env va ids pres mty =
           | None -> assert false (* RL: FIXME *)
         end
       end
-      (*
-      begin match Nominal.equivalent_type nom with
-      | None -> 
-        begin match Path.find_free_opt ids p with
-        | Some id ->
-            let expansion =
-              try Env.find_modtype_expansion p env
-              with Not_found ->
-                raise (Ctype.Nondep_cannot_erase id)
-            in
-            nondep_mty_with_presence env va ids pres expansion
-        | None -> pres, mty
-        end
-      
-      | Some mty ->
-        let dep_id p = Option.is_some (Path.find_free_opt ids p) in
-        let dep_with = function
-          | _, Nominal.Nmc_module p -> dep_id (Nominal.untyped_path p)
-          | _, Nominal.Nmc_strengthen (p,_) -> dep_id p
-          | _, Nominal.Nmc_type p -> dep_id p
-        in
-        if dep_id p || List.exists dep_with (Nominal.constraints nom)
-          then nondep_mty_with_presence env va ids pres mty
-          else pres, Mty_ident (p, nom)
-      end
-      *)
   | Mty_alias p ->
       begin match Path.find_free_opt ids p with
       | Some id ->
@@ -762,14 +736,12 @@ and enrich_item env p = function
   | item -> item
 
 let rec type_paths env p mty =
-  match scrape env mty with
-    Mty_ident _ -> [] (* RL: FIXME I think this is ok? *)
-    (*
-    begin match Nominal.equivalent_type nom with
-    | Some sg -> type_paths env p sg
-    | None -> []
-    end
-    *)
+  match mty with
+    Mty_ident (q,nom) ->
+      begin match expand_modtype_with env q nom with
+      | Some mty -> type_paths env p mty
+      | None -> [] (* RL: FIXME I think this is ok? *)
+      end
   | Mty_alias _ -> []
   | Mty_signature sg -> type_paths_sig env p sg
   | Mty_functor _ -> []
@@ -793,10 +765,10 @@ let rec no_code_needed_mod env pres mty =
   match pres with
   | Mp_absent -> true
   | Mp_present -> begin
-      match scrape env mty with
-        Mty_ident (_, nom) ->
-          begin match Nominal.equivalent_type nom with
-          | Some sg -> no_code_needed_mod env pres sg
+        match mty with
+        Mty_ident (p, nom) ->
+          begin match expand_modtype_with env p nom with
+          | Some mty -> no_code_needed_mod env pres mty
           | None -> false
           end
       | Mty_signature sg -> no_code_needed_sig env sg
@@ -827,14 +799,9 @@ let no_code_needed env mty = no_code_needed_mod env Mp_present mty
 
 let rec contains_type env = function
     Mty_ident (path, nom) ->
-      begin match Nominal.equivalent_type nom with
-        | None ->
-          begin try match (Env.find_modtype path env).mtd_type with
-          | None -> raise Exit (* PR#6427 *)
-          | Some mty -> contains_type env mty
-          with Not_found -> raise Exit
-          end
+      begin match expand_modtype_with env path nom with
         | Some mty -> contains_type env mty
+        | None -> raise Exit (* PR#6427 *)
       end
   | Mty_signature sg ->
       contains_type_sig env sg
