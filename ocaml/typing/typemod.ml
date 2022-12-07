@@ -1485,8 +1485,11 @@ and transl_modtype_aux env smty =
         ([],Some [],init_sg) constraints in
       let scope = Ctype.create_scope () in
       let mty = match body.mty_type, rev_withs with
-        | Mty_ident (p,nom), Some withs ->
-            Mty_ident (p, Nominal.add nom withs (fun _ -> Mty_signature final_sg))
+        | Mty_ident (p,nom), Some rev_withs ->
+            let nom =
+              Nominal.add nom (List.rev rev_withs) (fun _ -> Mty_signature final_sg)
+            in
+            Mty_ident (p, nom)
         | _ -> Mty_signature final_sg
       in
       mkmty (Tmty_with ( body, List.rev rev_tcstrs))
