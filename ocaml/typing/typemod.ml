@@ -23,6 +23,18 @@ open Format
 
 let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
 
+type rl_with =
+  | Rl_with_none
+  | Rl_with_name
+  | Rl_with_unstrengthened
+  | Rl_with_strengthened
+
+let rl_with = match Sys.getenv_opt "RL_WITH" with
+  | None -> Rl_with_none
+  | Some "u" -> Rl_with_unstrengthened
+  | Some "s" -> Rl_with_strengthened
+  | Some _ -> Rl_with_name
+
 let () = Includemod_errorprinter.register ()
 
 module Sig_component_kind = Shape.Sig_component_kind
@@ -650,7 +662,7 @@ let merge_constraint initial_env loc sg lid constr =
         in
         return ~ghosts
           ~replace_by:(Some (Sig_type(id, newdecl, rs, priv)))
-          (Pident id, lid, Twith_type tdecl)
+          (Pident id, lid, Twith_type tdecl, None)
     | Sig_type(id, sig_decl, rs, priv) , [s],
        (With_type sdecl | With_typesubst sdecl as constr)
       when Ident.name id = s ->
@@ -667,11 +679,11 @@ let merge_constraint initial_env loc sg lid constr =
           With_type _ ->
             return ~ghosts
               ~replace_by:(Some(Sig_type(id, newdecl, rs, priv)))
-              (Pident id, lid, Twith_type tdecl)
+              (Pident id, lid, Twith_type tdecl, None)
         | (* With_typesubst *) _ ->
             real_ids := [Pident id];
             return ~ghosts ~replace_by:None
-              (Pident id, lid, Twith_typesubst tdecl)
+              (Pident id, lid, Twith_typesubst tdecl, None)
         end
     | Sig_modtype(id, mtd, priv), [s],
       (With_modtype mty | With_modtypesubst mty)
@@ -694,7 +706,7 @@ let merge_constraint initial_env loc sg lid constr =
           in
           return
             ~replace_by:(Some(Sig_modtype(id, mtd', priv)))
-            (Pident id, lid, Twith_modtype mty)
+            (Pident id, lid, Twith_modtype mty, None)
         else begin
           let path = Pident id in
           real_ids := [path];
@@ -702,7 +714,7 @@ let merge_constraint initial_env loc sg lid constr =
           | Mty_ident _ -> ()
           | mty -> unpackable_modtype := Some mty
           end;
-          return ~replace_by:None (Pident id, lid, Twith_modtypesubst mty)
+          return ~replace_by:None (Pident id, lid, Twith_modtypesubst mty, None)
         end
     | Sig_module(id, pres, md, rs, priv), [s],
       With_module {lid=lid'; md=md'; path; remove_aliases}
@@ -724,7 +736,7 @@ let merge_constraint initial_env loc sg lid constr =
                  newmd.md_type md.md_type);
         return
           ~replace_by:(Some(Sig_module(id, pres, newmd, rs, priv)))
-          (Pident id, lid, Twith_module (path, lid'))
+          (Pident id, lid, Twith_module (path, lid'), Some (mty, newmd.md_type))
     | Sig_module(id, _, md, _rs, _), [s], With_modsubst (lid',path,md')
       when Ident.name id = s ->
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
@@ -733,12 +745,12 @@ let merge_constraint initial_env loc sg lid constr =
           (Includemod.strengthened_module_decl ~loc ~mark:Mark_both
              ~aliasable sig_env md' path md);
         real_ids := [Pident id];
-        return ~replace_by:None (Pident id, lid, Twith_modsubst (path, lid'))
+        return ~replace_by:None (Pident id, lid, Twith_modsubst (path, lid'), None)
     | Sig_module(id, _, md, rs, priv) as item, s :: namelist, constr
       when Ident.name id = s ->
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
         let sg = extract_sig sig_env loc md.md_type in
-        let ((path, _, tcstr), nom, newsg) = merge_signature sig_env sg namelist in
+        let ((path, _, tcstr, tys), nom, newsg) = merge_signature sig_env sg namelist in
         let path = path_concat id path in
         real_ids := path :: !real_ids;
         let item =
@@ -754,7 +766,8 @@ let merge_constraint initial_env loc sg lid constr =
               let newmd = {md with md_type = Mty_signature newsg} in
               Sig_module(id, Mp_present, newmd, rs, priv)
         in
-        return ~replace_by:(Some item) (path, lid, tcstr)
+        (* RL FIXME: prefix tys *)
+        return ~replace_by:(Some item) (path, lid, tcstr, tys)
     | _ -> None
   and merge_signature env sg namelist =
     match
@@ -769,7 +782,15 @@ let merge_constraint initial_env loc sg lid constr =
                 Printtyp.modtype wm.md.md_type
             );
             assert (not wm.remove_aliases);
-            Some (namelist, Nominal.Nmc_module (Nominal.Nmty_of wm.path))
+            let tp = match rl_with, x with
+              | Rl_with_none, _ -> None
+              | Rl_with_unstrengthened, (_, _, _, Some (mty,_)) ->
+                  Some (Nominal.Nmty_strengthened (wm.path, mty))
+              | Rl_with_strengthened, _ ->
+                  Some (Nominal.Nmty_strengthened (wm.path,wm.md.md_type))
+              | _, _ -> Some (Nominal.Nmty_of wm.path)
+            in
+            Option.map (fun tp -> (namelist, Nominal.Nmc_module tp)) tp
         | _ -> None
         in
         x, nom, sg
@@ -783,7 +804,7 @@ let merge_constraint initial_env loc sg lid constr =
         !unpackable_modtype sg;
     let sg =
     match tcstr with
-    | (_, _, Twith_typesubst tdecl) ->
+    | (_, _, Twith_typesubst tdecl, _) ->
        let how_to_extend_subst =
          let sdecl =
            match constr with
@@ -812,7 +833,7 @@ let merge_constraint initial_env loc sg lid constr =
           making it local makes it unlikely that we will ever use the result of
           this function unfreshened without issue. *)
        Subst.signature Make_local sub sg
-    | (_, _, Twith_modsubst (real_path, _)) ->
+    | (_, _, Twith_modsubst (real_path, _), _) ->
        let sub = Subst.change_locs Subst.identity loc in
        let sub =
          List.fold_left
@@ -822,7 +843,7 @@ let merge_constraint initial_env loc sg lid constr =
        in
        (* See explanation in the [Twith_typesubst] case above. *)
        Subst.signature Make_local sub sg
-    | (_, _, Twith_modtypesubst tmty) ->
+    | (_, _, Twith_modtypesubst tmty, _) ->
         let add s p = Subst.add_modtype_path p tmty.mty_type s in
         let sub = Subst.change_locs Subst.identity loc in
         let sub = List.fold_left add sub !real_ids in
@@ -1496,6 +1517,8 @@ and transl_with ~loc env remove_aliases (rev_tcstrs,rev_withs,sg) constr =
         l, With_modtypesubst mty
   in
   let (tcstr, nom, sg) = merge_constraint env loc sg lid with_info in
+  let tcstr = let a,b,c,_ = tcstr in a,b,c
+  in
   let rev_withs = match rev_withs, nom with
     | Some rev_withs, Some w -> Some (w :: rev_withs)
     | _ -> None
