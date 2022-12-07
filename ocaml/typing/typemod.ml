@@ -113,7 +113,7 @@ let rec path_concat head p =
 (* Extract a signature from a module type *)
 
 let extract_sig env loc mty =
-  match Env.scrape_alias env mty with
+  match (* Mtype.expand_alias_and_with *) Env.scrape_alias env mty with
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
@@ -125,7 +125,7 @@ let extract_sig env loc mty =
   | _ -> raise(Error(loc, env, Signature_expected))
 
 let extract_sig_open env loc mty =
-  match Env.scrape_alias env mty with
+  match (* Mtype.expand_alias_and_with *) Env.scrape_alias env mty with
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))

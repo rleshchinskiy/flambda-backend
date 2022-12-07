@@ -366,7 +366,7 @@ module Nominal = struct
 
   let map_equivalent_type f = Option.map (fun (cs,t) -> (cs, f t))
 
-  let map f =
+  let map_module_constraint f (ns,def) =
     let rec map_typed_path f = function
     | Nmty_of p -> Nmty_of p
     | Nmty_strengthened (p,t) -> Nmty_strengthened (p,f t)
@@ -377,7 +377,9 @@ module Nominal = struct
     | Nmc_module p -> Nmc_module (map_typed_path f p)
     | Nmc_strengthen _ | Nmc_type _ as x -> x
     in
-    let map_module_constraint f (ns,def) = (ns, map_definition f def) in
+    (ns, map_definition f def)
+
+  let map f =
     Option.map (fun(cs,ty) -> (List.map (map_module_constraint f) cs, f ty))
 
   let map_paths f g =

@@ -603,10 +603,54 @@ let unfold_signature env subst ~aliasable sg =
   in
   if rl_with then sg' else Signature.unpack sg
 *)
-  
+
+let rec expand_alias_and_with_lazy env ?path mty =
+  let open Subst.Lazy in
+  match mty with
+  | MtyL_ident (p, nom) ->
+      begin match expand_lazy_modtype_with env p nom with
+      | Some mty -> expand_alias_and_with_lazy env ?path mty
+      | None -> mty
+      end
+  | MtyL_alias path ->
+      begin try
+        expand_alias_and_with_lazy env ~path ((Env.find_module_lazy path env).mdl_type)
+      with Not_found ->
+        (*Location.prerr_warning Location.none
+          (Warnings.No_cmi_file (Path.name path));*)
+        mty
+      end
+  | _ ->
+      begin match path with
+      | Some p -> strengthen_lazy ~aliasable:true env mty p
+      | None -> mty
+      end
+
+let expand_alias_and_with_lazy env mty = expand_alias_and_with_lazy env mty
+
+(*
+   
+  | MtyL_alias path, _ ->
+      begin try
+        scrape_alias env ((find_module_lazy path env).mdl_type) ~path
+      with Not_found ->
+        (*Location.prerr_warning Location.none
+          (Warnings.No_cmi_file (Path.name path));*)
+        mty
+      end
+  | mty, Some path ->
+      !strengthen ~aliasable:true env mty path
+*)
+
+
+let expand_alias_and_with env mty =
+  expand_alias_and_with_lazy env (Subst.Lazy.of_modtype mty)
+  |> Subst.Lazy.force_modtype
+
 let () =
   Env.strengthen := strengthen_lazy ;
-  Env.expand_lazy_modtype_with := expand_lazy_modtype_with
+  Env.expand_lazy_modtype_with := expand_lazy_modtype_with ;
+  Env.expand_modtype_with := expand_modtype_with
 
 
 (* In nondep_supertype, env is only used for the type it assigns to id.

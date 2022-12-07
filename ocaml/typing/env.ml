@@ -810,6 +810,12 @@ let expand_lazy_modtype_with =
   ref ((fun _env _p _nom -> assert false) :
         t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option)
 
+let expand_modtype_with =
+  (* to be filled with Mtype.expand_lazy_modtype_with *)
+  ref ((fun _env _p _nom -> assert false) :
+        t -> Path.t -> nominal -> module_type option)
+        
+        
 let md md_type =
   {md_type; md_attributes=[]; md_loc=Location.none
   ;md_uid = Uid.internal_not_actually_unique}
