@@ -1669,12 +1669,10 @@ let find_shadowed_types path env =
 let rec scrape_alias env ?path mty =
   let open Subst.Lazy in
   match mty, path with
-    MtyL_ident (p, nom), _ when Nominal.is_empty nom ->
-      (* RL: FIXME *)
-      begin try
-        scrape_alias env (find_modtype_expansion_lazy p env) ?path
-      with Not_found ->
-        mty
+    MtyL_ident (p, nom), _ ->
+      begin match !expand_lazy_modtype_with env p nom with
+      | Some mty -> scrape_alias env mty ?path
+      | None -> mty
       end
   | MtyL_alias path, _ ->
       begin try
@@ -1687,6 +1685,7 @@ let rec scrape_alias env ?path mty =
   | mty, Some path ->
       !strengthen ~aliasable:true env mty path
   | _ -> mty
+
 
 (* Given a signature and a root path, prefix all idents in the signature
    by the root path and build the corresponding substitution. *)

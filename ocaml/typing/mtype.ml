@@ -622,6 +622,7 @@ let unfold_signature env subst ~aliasable sg =
   if rl_with then sg' else Signature.unpack sg
 *)
 
+(*
 let rec expand_alias_and_with_lazy env ?path mty =
   let open Subst.Lazy in
   match mty with
@@ -645,6 +646,7 @@ let rec expand_alias_and_with_lazy env ?path mty =
       end
 
 let expand_alias_and_with_lazy env mty = expand_alias_and_with_lazy env mty
+*)
 
 (*
    
@@ -661,9 +663,11 @@ let expand_alias_and_with_lazy env mty = expand_alias_and_with_lazy env mty
 *)
 
 
+(*
 let expand_alias_and_with env mty =
   expand_alias_and_with_lazy env (Subst.Lazy.of_modtype mty)
   |> Subst.Lazy.force_modtype
+*)
 
 let () =
   Env.strengthen := strengthen_lazy ;
