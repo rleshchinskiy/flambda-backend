@@ -805,7 +805,7 @@ let strengthen =
          aliasable:bool -> t -> Subst.Lazy.modtype ->
          Path.t -> Subst.Lazy.modtype)
 
-let expand_lazy_modtype_with =
+let expand_lazy_nominal =
   (* to be filled with Mtype.expand_lazy_modtype_with *)
   ref ((fun _env _p _nom -> assert false) :
         t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option)
@@ -1670,7 +1670,7 @@ let rec scrape_alias env ?path mty =
   let open Subst.Lazy in
   match mty, path with
     MtyL_ident (p, nom), _ ->
-      begin match !expand_lazy_modtype_with env p nom with
+      begin match !expand_lazy_nominal env p nom with
       | Some mty -> scrape_alias env mty ?path
       | None -> mty
       end

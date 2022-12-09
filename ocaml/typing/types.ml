@@ -360,7 +360,7 @@ module Nominal = struct
 
   let constraints cs = cs
 
-  let map_module_constraint f (ns,def) =
+  let map f = 
     let rec map_typed_path f = function
     | Nmty_strengthened (p,t) -> Nmty_strengthened (p,f t)
     | Nmty_dot (p,s) -> Nmty_dot (map_typed_path f p,s)
@@ -370,9 +370,7 @@ module Nominal = struct
     | Nmc_module p -> Nmc_module (map_typed_path f p)
     | Nmc_strengthen _ | Nmc_type _ as x -> x
     in
-    (ns, map_definition f def)
-
-  let map f = List.map (map_module_constraint f)
+    List.map (fun (ns,def) -> (ns, map_definition f def))
   
   let map_nominal f = List.map f
 

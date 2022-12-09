@@ -633,8 +633,6 @@ module Nominal : sig
   val add : 'a nominal -> 'a module_constraint list -> 'a nominal
   val append : 'a nominal -> 'a nominal -> 'a nominal
 
-  val map_module_constraint : ('a -> 'b) -> 'a module_constraint -> 'b module_constraint
-
   val make : 'a module_constraint list -> 'a nominal
 
   val untyped_path : 'a typed_path -> Path.t
