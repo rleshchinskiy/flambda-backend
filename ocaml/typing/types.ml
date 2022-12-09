@@ -335,7 +335,6 @@ type aliasability =
 
 module Nominal = struct
   type 'a typed_path =
-    | Nmty_of of Path.t (* module type of struct include M end *)
     | Nmty_strengthened of Path.t * 'a (* 'a strengthend to Path.t *)
     | Nmty_dot of 'a typed_path * string
     | Nmty_apply of 'a typed_path * Path.t
@@ -350,7 +349,6 @@ module Nominal = struct
   type 'a nominal = 'a module_constraint list
 
   let rec untyped_path = function
-  | Nmty_of p -> p
   | Nmty_strengthened (p,_) -> p
   | Nmty_dot (p,s) -> Path.Pdot (untyped_path p, s)
   | Nmty_apply (p,q) -> Path.Papply (untyped_path p, q)
@@ -364,7 +362,6 @@ module Nominal = struct
 
   let map_module_constraint f (ns,def) =
     let rec map_typed_path f = function
-    | Nmty_of p -> Nmty_of p
     | Nmty_strengthened (p,t) -> Nmty_strengthened (p,f t)
     | Nmty_dot (p,s) -> Nmty_dot (map_typed_path f p,s)
     | Nmty_apply (p,q) -> Nmty_apply (map_typed_path f p, q)

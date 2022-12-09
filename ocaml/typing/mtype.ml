@@ -79,7 +79,7 @@ and strengthen_lazy_sig' ~aliasable env sg p =
         ((env, withs), Some sigelt)
     | SigL_type(id, {type_kind=Type_abstract}, _, _)
       when Btype.is_row_name (Ident.name id) ->
-        ((env, None), None)
+        ((env, withs), None)
     | SigL_type(id, decl, rs, vis) ->
         let (newdecl, newwiths) =
           match decl.type_manifest, decl.type_private, decl.type_kind with
@@ -365,18 +365,6 @@ and constrain_sig_item constr env item =
       | MtyL_signature _ -> assert false
     in
     let rec compute = function
-      | Nmty_of p ->
-          let md =
-            try Env.find_module_lazy p env
-            with Not_found ->
-              Format.printf "not found %a@." Printtyp.path p;
-              raise Not_found
-          in
-          let _, mty = scrape_for_lazy_type_of env Mp_present md.mdl_type in
-          let md = { md with mdl_type = mty } in
-          let str =
-              strengthen_lazy_decl ~aliasable:false env md p in
-          str
       | Nmty_strengthened (p,mty) ->
           let md = { md with mdl_type = mty } in
           let str =

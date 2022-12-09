@@ -124,7 +124,6 @@ type out_module_type =
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
 and out_typed_path =
-  | Otp_of of out_ident
   | Otp_strengthened of out_ident * out_module_type
   | Otp_dot of out_typed_path * string
   | Otp_apply of out_typed_path * out_ident

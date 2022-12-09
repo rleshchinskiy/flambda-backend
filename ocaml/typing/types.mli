@@ -612,7 +612,6 @@ type 'a nmty =
 
 module Nominal : sig
   type 'a typed_path =
-    | Nmty_of of Path.t (* module type of struct include M end *)
     | Nmty_strengthened of Path.t * 'a (* 'a strengthend to Path.t *)
     | Nmty_dot of 'a typed_path * string
     | Nmty_apply of 'a typed_path * Path.t

@@ -25,15 +25,13 @@ let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
 
 type rl_with =
   | Rl_with_none
-  | Rl_with_name
   | Rl_with_unstrengthened
   | Rl_with_strengthened
 
 let rl_with = match Sys.getenv_opt "RL_WITH" with
   | None -> Rl_with_none
-  | Some "u" -> Rl_with_unstrengthened
   | Some "s" -> Rl_with_strengthened
-  | Some _ -> Rl_with_name
+  | Some _ -> Rl_with_unstrengthened
 
 let () = Includemod_errorprinter.register ()
 
@@ -767,9 +765,9 @@ let merge_constraint initial_env loc sg lid constr =
               | Rl_with_none, _ -> None
               | Rl_with_unstrengthened, (_, _, _, Some (mty,_)) ->
                   Some (Nominal.Nmty_strengthened (wm.path, mty))
+              | Rl_with_unstrengthened, _ -> None
               | Rl_with_strengthened, _ ->
                   Some (Nominal.Nmty_strengthened (wm.path,wm.md.md_type))
-              | _, _ -> Some (Nominal.Nmty_of wm.path)
             in
             Option.map (fun tp -> (namelist, Nominal.Nmc_module tp)) tp
         | _, _ -> None
@@ -1992,7 +1990,6 @@ let rec nongen_modtype env f = function
           Do we need to return a module_type option here which expands as much
           as necessary to get rid of non-gen tyvars? *)
       let rec nongen_tpath = function
-      | Nominal.Nmty_of _ -> false
       | Nominal.Nmty_strengthened (_,mty) ->
           (* RL FIXME: Is this correct? What if the constraint doesn't
              change the underlying type? *)
@@ -3064,7 +3061,6 @@ let type_structure = type_structure false None
 let rec normalize_modtype = function
   | Mty_ident (_,nom) ->
       let rec normalize_tpath = function
-      | Nominal.Nmty_of _ -> ()
       | Nominal.Nmty_strengthened (_,mty) -> normalize_modtype mty
       | Nominal.Nmty_dot (tp,_) -> normalize_tpath tp
       | Nominal.Nmty_apply (tp,_) -> normalize_tpath tp

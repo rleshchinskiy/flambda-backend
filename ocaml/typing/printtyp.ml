@@ -1958,7 +1958,6 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       Omty_alias (tree_of_path Module p)
 
 and tree_of_typed_path ?(ellipsis=false) = function
-  | Types.Nominal.Nmty_of p -> Otp_of (tree_of_path Module p)
   | Types.Nominal.Nmty_strengthened (p,mty) ->
       Otp_strengthened (tree_of_path Module p, tree_of_modtype ~ellipsis mty)
   | Types.Nominal.Nmty_dot (p,s) -> Otp_dot (tree_of_typed_path ~ellipsis p, s)

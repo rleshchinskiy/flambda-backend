@@ -643,7 +643,6 @@ and print_simple_out_module_type ppf =
      fprintf ppf "(%a)" print_out_module_type non_simple
 and print_out_typed_path ppf =
   function
-  | Otp_of id -> print_ident ppf id
   | Otp_strengthened (id,mty) ->
       fprintf ppf "(%a/%a)"
         print_ident id

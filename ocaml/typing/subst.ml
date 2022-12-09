@@ -579,30 +579,7 @@ and force_nominal nom = Nominal.map force_modtype nom
 
 and subst_lazy_nominal scoping s =
   let open Types.Nominal in
-  let rec module_arg s path =
-    match Path.Map.find_opt path s.modules with
-    | Some new_path ->
-        begin match Path.Map.find_opt path s.modargs with
-        | Some mty -> Nominal.Nmty_strengthened (new_path, lazy_modtype mty)
-        | None -> Nominal.Nmty_of new_path
-      end
-    | None ->
-      match path with
-      | Pident _ -> Nominal.Nmty_of path
-      | Pdot (p, n) ->
-        begin match module_arg s p with
-        | Nominal.Nmty_of q -> Nominal.Nmty_of (Pdot (q,n))
-        | q -> Nominal.Nmty_dot (q,n)
-        end
-      | Papply (p1,p2) ->
-        let p2 = module_path s p2 in
-        begin match module_arg s p1 with
-        | Nominal.Nmty_of q -> Nominal.Nmty_of (Papply (q,p2))
-        | q -> Nominal.Nmty_apply (q,p2)
-        end
-  in
   let rec typed_path = function
-    | Nmty_of p -> module_arg s p
     | Nmty_strengthened (p,mty) ->
         let mty = subst_lazy_modtype scoping s mty in
         Nmty_strengthened (module_path s p, mty)
