@@ -113,27 +113,31 @@ let rec path_concat head p =
 (* Extract a signature from a module type *)
 
 let extract_sig env loc mty =
-  match (* Mtype.expand_alias_and_with *) Env.scrape_alias env mty with
+  match Mtype.expand_alias_and_with (* Env.scrape_alias *) env mty with
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
+  (*
   | Mty_ident (_,nom) ->
       begin match Nominal.equivalent_type nom with
       | Some (Mty_signature sg) -> sg
       | _ -> raise(Error(loc, env, Signature_expected))
       end
+  *)
   | _ -> raise(Error(loc, env, Signature_expected))
 
 let extract_sig_open env loc mty =
-  match (* Mtype.expand_alias_and_with *) Env.scrape_alias env mty with
+  match Mtype.expand_alias_and_with (* Env.scrape_alias *) env mty with
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
+  (*
   | Mty_ident (_,nom) as mty ->
       begin match Nominal.equivalent_type nom with
       | Some (Mty_signature sg) -> sg
       | _ -> raise(Error(loc, env, Structure_expected mty))
       end
+  *)
   | mty -> raise(Error(loc, env, Structure_expected mty))
 
 (* Extract the signature of a functor's body, using the provided [sig_acc]

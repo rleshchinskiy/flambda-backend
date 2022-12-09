@@ -467,6 +467,8 @@ module Lazy_types = struct
 
   and nominal = modtype Types.Nominal.nominal
 
+  and module_constraint = modtype Types.Nominal.module_constraint
+
   and modtype_declaration =
     {
       mtdl_type: modtype option;
@@ -632,7 +634,9 @@ and subst_lazy_modtype scoping s = function
           begin match mty with
           | Mty_ident (q, qnom) ->
               MtyL_ident (q, Nominal.append (lazy_nominal qnom) nom)
-          | mty -> lazy_modtype mty
+          | _ -> assert false
+              (* RL FIXME *)
+              (* lazy_modtype mty *)
           end
        | exception Not_found ->
           begin match p with

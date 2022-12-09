@@ -89,7 +89,6 @@ val compose: t -> t -> t
 val ctype_apply_env_empty:
   (type_expr list -> type_expr -> type_expr list -> type_expr) ref
 
-
 module Lazy : sig
   type module_decl =
     {
@@ -106,6 +105,8 @@ module Lazy : sig
     | MtyL_alias of Path.t
 
   and nominal = modtype Types.Nominal.nominal
+
+  and module_constraint = modtype Types.Nominal.module_constraint
 
   and modtype_declaration =
     {

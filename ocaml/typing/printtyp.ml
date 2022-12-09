@@ -37,6 +37,17 @@ let rl_print_with =
   | None -> Option.is_some (Sys.getenv_opt "RL_WITH")
   | Some s -> not (String.equal s "0")
 
+type rl_print_expand =
+  | Rlpe_dont
+  | Rlpe_expand
+  | Rlpe_equivalent
+
+let rl_print_expand =
+  match Sys.getenv_opt "RL_PRINT_EXPAND" with
+  | Some "0" | Some "no" -> Rlpe_dont
+  | Some "x" -> Rlpe_expand
+  | _ -> Rlpe_equivalent
+
 (* Print a long identifier *)
 
 let rec longident ppf = function
@@ -1895,38 +1906,51 @@ let add_sigitem env x =
 
 let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_ident (p, nom) ->
-      let mk_ident nom = Omty_ident (tree_of_path Module_type p, nom) in
-      begin match Types.Nominal.equivalent_type nom with
-        | Some sg when rl_print_with ->
-            (*
-            let mk_with = function
-              | Types.Nom_with_module (ns, p, k) ->
-                  let kind = match k with
-                  | Wkind_user x -> Owk_user x
-                  | Wkind_strengthen x -> Owk_strengthen x
-                  in
-                  Onom_with_module (String.concat "." ns, tree_of_path Module p, kind)
-              | Types.Nom_with_type (ns, p) ->
-                  Onom_with_type (String.concat "." ns, tree_of_path Type p)
+    let mty = match rl_print_expand with
+      | Rlpe_equivalent -> Types.Nominal.equivalent_type nom
+      | Rlpe_dont -> None
+      | Rlpe_expand -> 
+          begin match Types.Nominal.constraints nom with
+            | [] -> None
+            | _ ->
+              let env = !printing_env
               in
-            *)
-            let rec mk_path = function
-            | Types.Nominal.Nmty_of p -> Otp_of (tree_of_path Module p)
-            | Types.Nominal.Nmty_strengthened (p,mty) ->
-                Otp_strengthened (tree_of_path Module p, tree_of_modtype ~ellipsis mty)
-            | Types.Nominal.Nmty_dot (p,s) -> Otp_dot (mk_path p, s)
-            | Types.Nominal.Nmty_apply (p,q) -> Otp_apply (mk_path p, tree_of_path Module q)
+              !Env.expand_modtype_with env p nom
+          end
+    in
+    let t = Option.map (tree_of_modtype ~ellipsis) mty
+    in
+    begin match t with
+    | Some t when not rl_print_with -> t
+    | _ ->
+      let path = tree_of_path Module_type p
+      in
+      let cs = List.map (tree_of_module_constraint ~ellipsis) (Types.Nominal.constraints nom)
+      in
+      Omty_ident (path, cs, t)
+    end
+    (*
+      let mty = match rl_print_expand, Types.Nominal.constraints nom with
+        | Rlpe_equivalent, _ -> Nominal.equivalent_type nom
+        | _, [] -> None
+        | Rlpe_dont, _ -> None
+        | Rlpe_expand, _ ->
+            let env = !printing_env
             in
-            let mk_with = function
-              | ns, Types.Nominal.Nmc_module p -> Omc_module (ns, mk_path p)
-              | ns, Types.Nominal.Nmc_strengthen (p,a) ->
-                  Omc_strengthen (ns, tree_of_path Module p, a)
-              | ns, Types.Nominal.Nmc_type p -> Omc_type (ns, tree_of_path Type p)
-            in
-            (mk_ident (Some (List.map mk_with (Types.Nominal.constraints nom), tree_of_modtype ~ellipsis sg)))
-        | Some sg -> tree_of_modtype ~ellipsis sg
-        | _ -> mk_ident None
+            !Env.expand_modtype_with env p nom
+      in
+      let t = Option.map (tree_of_modtype ~ellipsis) mty
+      in
+      begin match t with
+      | Some t when not rl_print_with -> t
+      | _ ->
+        let id = tree_of_path Module p
+        in
+        let cs = List.map (tree_of_module_constraint ~ellipsis) (Types.Nominal.constraints nom)
+        in
+        Omty_ident (id, cs, t)
       end
+    *)
   | Mty_signature sg ->
       Omty_signature (if ellipsis then [Osig_ellipsis]
                       else tree_of_signature sg)
@@ -1938,6 +1962,21 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       Omty_functor (param, res)
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
+
+and tree_of_typed_path ?(ellipsis=false) = function
+  | Types.Nominal.Nmty_of p -> Otp_of (tree_of_path Module p)
+  | Types.Nominal.Nmty_strengthened (p,mty) ->
+      Otp_strengthened (tree_of_path Module p, tree_of_modtype ~ellipsis mty)
+  | Types.Nominal.Nmty_dot (p,s) -> Otp_dot (tree_of_typed_path ~ellipsis p, s)
+  | Types.Nominal.Nmty_apply (p,q) ->
+      Otp_apply (tree_of_typed_path ~ellipsis p, tree_of_path Module q)
+
+and tree_of_module_constraint ?(ellipsis=false) = function
+  | ns, Types.Nominal.Nmc_module p ->
+      Omc_module (ns, tree_of_typed_path ~ellipsis p)
+  | ns, Types.Nominal.Nmc_strengthen (p,a) ->
+      Omc_strengthen (ns, tree_of_path Module p, a)
+  | ns, Types.Nominal.Nmc_type p -> Omc_type (ns, tree_of_path Type p)
 
 and tree_of_functor_parameter = function
   | Unit ->
@@ -2055,6 +2094,13 @@ let print_signature ppf tree =
 
 let signature ppf sg =
   fprintf ppf "%a" print_signature (tree_of_signature sg)
+
+let module_constraint ppf c =
+  !Oprint.out_module_constraint ppf (tree_of_module_constraint c)
+
+let nominal_type ppf (p,nom) =
+  !Oprint.out_module_type ppf
+    (Omty_ident (tree_of_path Module p, List.map tree_of_module_constraint (Nominal.constraints nom), None))
 
 (* Print a signature body (used by -i when compiling a .ml) *)
 let printed_signature sourcefile ppf sg =

@@ -525,6 +525,9 @@ let out_signature = ref (fun _ -> failwith "Oprint.out_signature")
 let out_type_extension = ref (fun _ -> failwith "Oprint.out_type_extension")
 let out_functor_parameters =
   ref (fun _ -> failwith "Oprint.out_functor_parameters")
+let out_module_constraint =
+  ref (fun _ -> failwith "Oprint.out_module_constraint")
+  
 
 (* For anonymous functor arguments, the logic to choose between
    the long-form
@@ -612,60 +615,23 @@ and print_out_functor ppf t =
 and print_simple_out_module_type ppf =
   function
     Omty_abstract -> ()
-  | Omty_ident (id, nom) ->
-      (*
-      let print_sig ppf sg = match sg with
-        | [] -> fprintf ppf "sig end"
-        | sg ->
-           fprintf ppf "@[<hv 2>sig@ %a@;<1 -2>end@]" print_out_signature sg
+  | Omty_ident (id, cs, mty) ->
+      let rec print_constrs sep ppf = function
+        | [] -> ()
+        | c :: cs -> 
+          fprintf ppf "@ %s %a%a"
+            sep
+            print_out_module_constraint c
+            (print_constrs "and") cs
       in
-      *)
-      begin match nom with
-      | Some (constrs, sg)  ->
-        let rec print_typed_path ppf = function
-        | Otp_of id -> print_ident ppf id
-        | Otp_strengthened (id,mty) ->
-            fprintf ppf "(%a/%a)"
-              print_ident id
-              print_out_module_type mty
-        | Otp_dot (p,s) ->
-            fprintf ppf "%a.%s"
-              print_typed_path p
-              s
-        | Otp_apply (p,q) ->
-            fprintf ppf "%a(%a)"
-              print_typed_path p
-              print_ident q
-        in
-        let dotted ns = String.concat "." ns in
-        let print_constr ppf = function
-        | Omc_module (ns,p) ->
-            fprintf ppf "module %s = %a"
-              (dotted ns)
-              print_typed_path p
-        | Omc_strengthen (ns,p,a) ->
-            fprintf ppf "module %s %s %a"
-              (dotted ns)
-              (if a then "@=" else "*=")
-              print_ident p
-        | Omc_type (ns,p) ->
-            fprintf ppf "type %s = %a"
-              (dotted ns)
-              print_ident p
-        in
-        let rec print_constrs sep ppf = function
-           | [] -> ()
-           | c :: cs -> 
-              fprintf ppf "@ %s %a%a"
-                sep
-                print_constr c
-                (print_constrs "and") cs
-         in
-         fprintf ppf "@[<hv 2>%a%a@ ==>@ %a@;<1 -2>@]"
-          print_ident id (print_constrs "with") constrs
-          print_out_module_type sg
-       | _ -> fprintf ppf "%a" print_ident id
-      end
+      begin match mty, cs with
+      | None, [] -> fprintf ppf "%a" print_ident id
+      | _, _ ->
+        fprintf ppf "@[<hv 2>%a%a%a@;<1 -2>@]"
+        print_ident id
+        (print_constrs "with") cs
+        (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty
+    end;
   | Omty_signature sg ->
      begin match sg with
        | [] -> fprintf ppf "sig end"
@@ -675,6 +641,37 @@ and print_simple_out_module_type ppf =
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple
+and print_out_typed_path ppf =
+  function
+  | Otp_of id -> print_ident ppf id
+  | Otp_strengthened (id,mty) ->
+      fprintf ppf "(%a/%a)"
+        print_ident id
+        print_out_module_type mty
+  | Otp_dot (p,s) ->
+      fprintf ppf "%a.%s"
+        print_out_typed_path p
+        s
+  | Otp_apply (p,q) ->
+      fprintf ppf "%a(%a)"
+      print_out_typed_path p
+        print_ident q
+and print_out_module_constraint ppf =
+  let dotted ns = String.concat "." ns in
+  function
+  | Omc_module (ns,p) ->
+      fprintf ppf "module %s = %a"
+        (dotted ns)
+        print_out_typed_path p
+  | Omc_strengthen (ns,p,a) ->
+      fprintf ppf "module %s %s %a"
+        (dotted ns)
+        (if a then "@=" else "*=")
+        print_ident p
+  | Omc_type (ns,p) ->
+      fprintf ppf "type %s = %a"
+        (dotted ns)
+        print_ident p
 and print_out_signature ppf =
   function
     [] -> ()
@@ -929,6 +926,7 @@ let _ = out_signature := print_out_signature
 let _ = out_sig_item := print_out_sig_item
 let _ = out_type_extension := print_out_type_extension
 let _ = out_functor_parameters := print_out_functor_parameters
+let _ = out_module_constraint := print_out_module_constraint
 
 (* Phrases *)
 

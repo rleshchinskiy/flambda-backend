@@ -23,6 +23,18 @@ let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
 
 let rl_with = Option.is_some (Sys.getenv_opt "RL_WITH")
 
+(*
+let rl_pr8548 = 
+  let sfx p s =
+    let m = String.length p in
+    let n = String.length s in
+    n >= m && String.sub s (n-m) m = p
+  in
+  Array.exists (sfx "pr8548.ml") Sys.argv
+*)
+
+let rl_expanding = ref false
+
 let rec scrape_lazy env mty =
   let open Subst.Lazy in
   match mty with
@@ -274,7 +286,6 @@ let scrape_for_type_of env pres mty =
   pres, Subst.Lazy.force_modtype mty
 
 
-
 let rec constrain_modtype env constr mty =
   let open Subst.Lazy in
   match mty with
@@ -294,7 +305,9 @@ let rec constrain_modtype env constr mty =
       let mty = (Env.find_module_lazy p env).mdl_type in
       constrain_modtype env constr mty
   | MtyL_signature sg -> MtyL_signature (constrain_signature env constr sg)
-  | MtyL_functor _ -> assert false
+  | MtyL_functor _ ->
+      (* RL FIXME *)
+      assert false
 
 and constrain_signature env constr sg =
   Subst.Lazy.force_signature_once sg
@@ -519,7 +532,13 @@ and constrain_sig_item constr env item =
         Env.add_module_declaration_lazy ~update_summary:false id pres md env in
       env, SigL_module(id, pres, md, rs, vis)
 
+    | _, SigL_modtype(id, decl, vis) ->
+      let env = Env.add_modtype_lazy ~update_summary:false id decl env in
+      env, SigL_modtype(id, decl, vis)
+        (* Need to add the module type in case it is manifest *)
+
     | _, sigelt -> env, sigelt
+
 
 and expand_lazy_modtype_with env p nom =
   let expand () =
@@ -528,24 +547,35 @@ and expand_lazy_modtype_with env p nom =
     | exception Not_found -> None
   in
   if rl_with
-    then begin
-      if rl_debugging then (
+    then
+    begin
+      let debug = rl_debugging && not !rl_expanding in
+      if debug then (rl_expanding := true);
+      if debug then (
         Format.printf "@[<hv 2>expanding %a@]@."
-          Printtyp.modtype (Subst.Lazy.force_modtype (MtyL_ident (p,nom)))
+          Printtyp.nominal_type (p, Nominal.map Subst.Lazy.force_modtype nom)
       );
+      let expand_type mty =
+        match Nominal.constraints nom with
+        | [] -> mty
+        | cs -> 
+            let scope = Ctype.create_scope () in
+            let mty = Subst.Lazy.modtype (Subst.Rescope scope) Subst.identity mty in
+            List.fold_left (fun t c -> constrain_modtype env c t) mty cs
+      in
       let r =
-        Option.map
-          (fun mty -> List.fold_left (fun t c -> constrain_modtype env c t) mty (Nominal.constraints nom))
-          (expand ())
+        Option.map expand_type (expand ())
       in
       begin match r with
-      | Some mty when rl_debugging ->
+      | Some mty when debug ->
         Format.printf "@[<hv 2>expand@ %a@ %a@]@."
           Printtyp.modtype (Subst.Lazy.force_modtype (MtyL_ident (p,nom)))
           Printtyp.modtype (Subst.Lazy.force_modtype mty)
       | _ -> ()
       end;
-      r end
+      if debug then (rl_expanding := false);
+      r
+    end
     else match Nominal.equivalent_type nom with
       | Some mty -> Some mty
       | None -> expand ()
