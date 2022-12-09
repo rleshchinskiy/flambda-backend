@@ -614,8 +614,7 @@ and subst_lazy_nominal scoping s =
     | Nmc_strengthen (p,a) -> Nmc_strengthen (module_path s p, a)
     | Nmc_type p -> Nmc_type (type_path s p)
   in
-  let module_constraint (ns,def) = (ns, definition def) in
-  map_nominal module_constraint (subst_lazy_modtype scoping s)
+  map_nominal (fun (ns,def) -> (ns, definition def))
 
 and lazy_modtype = function
   | Mty_ident (p, nom) -> MtyL_ident (p, lazy_nominal nom)
@@ -631,12 +630,12 @@ and subst_lazy_modtype scoping s = function
       let nom = subst_lazy_nominal scoping s nom in
       begin match Path.Map.find p s.modtypes with
        | mty ->
-          begin match mty with
-          | Mty_ident (q, qnom) ->
+          begin match mty, Nominal.constraints nom with
+          | Mty_ident (q, qnom), _ ->
               MtyL_ident (q, Nominal.append (lazy_nominal qnom) nom)
+          | mty, [] -> lazy_modtype mty
           | _ -> assert false
               (* RL FIXME *)
-              (* lazy_modtype mty *)
           end
        | exception Not_found ->
           begin match p with

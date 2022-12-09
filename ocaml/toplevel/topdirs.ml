@@ -379,7 +379,7 @@ let rec trim_signature = function
            sg)
   | Mty_ident (p,nom) ->
       (* RL FIXME: Is this right? Do we need to expand? *)
-      Mty_ident (p, Nominal.map_equivalent_type trim_signature nom)
+      Mty_ident (p, nom)
   | mty -> mty
 
 let show_prim to_sig ppf lid =

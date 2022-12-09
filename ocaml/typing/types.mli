@@ -629,17 +629,14 @@ module Nominal : sig
   val empty : 'a nominal
   val is_empty : 'a nominal -> bool
   val constraints : 'a nominal -> 'a module_constraint list
-  val equivalent_type : 'a nominal -> 'a option
-  val map_equivalent_type : ('a -> 'a) -> 'a nominal -> 'a nominal
   val map : ('a -> 'b) -> 'a nominal -> 'b nominal
-  val map_paths : (Path.t -> Path.t) -> (Path.t -> Path.t) -> 'a nominal -> 'a nominal
-  val map_nominal : ('a module_constraint -> 'a module_constraint) -> ('a -> 'a) -> 'a nominal -> 'a nominal
-  val add : 'a nominal -> 'a module_constraint list -> ('a option -> 'a) -> 'a nominal
+  val map_nominal : ('a module_constraint -> 'a module_constraint) -> 'a nominal -> 'a nominal
+  val add : 'a nominal -> 'a module_constraint list -> 'a nominal
   val append : 'a nominal -> 'a nominal -> 'a nominal
 
   val map_module_constraint : ('a -> 'b) -> 'a module_constraint -> 'b module_constraint
 
-  val make : 'a module_constraint list -> 'a -> 'a nominal
+  val make : 'a module_constraint list -> 'a nominal
 
   val untyped_path : 'a typed_path -> Path.t
 end

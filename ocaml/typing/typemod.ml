@@ -740,7 +740,7 @@ let merge_constraint initial_env loc sg lid constr =
                  and just check that the constraint is correct *)
               item
           | Mty_ident (p,nom), _, Some c ->
-              let newmd = {md with md_type = Mty_ident (p, Nominal.add nom [c] (fun _ -> Mty_signature newsg) )} in
+              let newmd = {md with md_type = Mty_ident (p, Nominal.add nom [c])} in
               Sig_module(id, Mp_present, newmd, rs, priv)
           | _ ->
               let newmd = {md with md_type = Mty_signature newsg} in
@@ -754,8 +754,9 @@ let merge_constraint initial_env loc sg lid constr =
       Signature_group.replace_in_place (patch_item constr namelist env sg) sg
     with
     | Some (x,sg) ->
-        let nom = match constr with
-        | With_module wm ->             
+        let nom = match constr, rl_with with
+        | _, Rl_with_none -> None
+        | With_module wm, _ ->             
             if rl_debugging then (
               Format.printf "@[<hv 2>with %a %a@]@."
                 Printtyp.path wm.path
@@ -771,7 +772,7 @@ let merge_constraint initial_env loc sg lid constr =
               | _, _ -> Some (Nominal.Nmty_of wm.path)
             in
             Option.map (fun tp -> (namelist, Nominal.Nmc_module tp)) tp
-        | _ -> None
+        | _, _ -> None
         in
         x, nom, sg
     | None -> raise(Error(loc, env, With_no_component lid.txt))
@@ -1460,14 +1461,17 @@ and transl_modtype_aux env smty =
       let body = transl_modtype env sbody in
       let init_sg = extract_sig env sbody.pmty_loc body.mty_type in
       let remove_aliases = has_remove_aliases_attribute smty.pmty_attributes in
+      let init_withs = match rl_with with
+        | Rl_with_none -> None
+        | _ -> Some []
+      in
       let (rev_tcstrs, rev_withs, final_sg) =
         List.fold_left (transl_with ~loc:smty.pmty_loc env remove_aliases)
-        ([],Some [],init_sg) constraints in
+        ([],init_withs,init_sg) constraints in
       let scope = Ctype.create_scope () in
       let mty = match body.mty_type, rev_withs with
         | Mty_ident (p,nom), Some rev_withs ->
-            let nom =
-              Nominal.add nom (List.rev rev_withs) (fun _ -> Mty_signature final_sg)
+            let nom = Nominal.add nom (List.rev rev_withs)
             in
             Mty_ident (p, nom)
         | _ -> Mty_signature final_sg
@@ -3070,8 +3074,7 @@ let rec normalize_modtype = function
       | _, Nominal.Nmc_strengthen _ -> ()
       | _, Nominal.Nmc_type _ -> ()
       in
-      List.iter normalize_module_constraint (Nominal.constraints nom) ;
-      Option.iter normalize_modtype (Nominal.equivalent_type nom) (* RL can be removed *)
+      List.iter normalize_module_constraint (Nominal.constraints nom)
   | Mty_alias _ -> ()
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body

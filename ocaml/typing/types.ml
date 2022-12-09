@@ -347,7 +347,7 @@ module Nominal = struct
 
   type 'a module_constraint = string list * 'a definition
 
-  type 'a nominal = ('a module_constraint list * 'a) option
+  type 'a nominal = 'a module_constraint list
 
   let rec untyped_path = function
   | Nmty_of p -> p
@@ -355,16 +355,12 @@ module Nominal = struct
   | Nmty_dot (p,s) -> Path.Pdot (untyped_path p, s)
   | Nmty_apply (p,q) -> Path.Papply (untyped_path p, q)
 
-  let empty = None
-  let is_empty = Option.is_none
+  let empty = []
+  let is_empty = function
+    | [] -> true
+    | _ -> false
 
-  let constraints = function
-  | Some (cs,_) -> cs
-  | None -> []
-
-  let equivalent_type nom = Option.map snd nom
-
-  let map_equivalent_type f = Option.map (fun (cs,t) -> (cs, f t))
+  let constraints cs = cs
 
   let map_module_constraint f (ns,def) =
     let rec map_typed_path f = function
@@ -379,38 +375,15 @@ module Nominal = struct
     in
     (ns, map_definition f def)
 
-  let map f =
-    Option.map (fun(cs,ty) -> (List.map (map_module_constraint f) cs, f ty))
+  let map f = List.map (map_module_constraint f)
   
+  let map_nominal f = List.map f
 
-  let map_paths f g =
-    let rec map_typed_path f = function
-    | Nmty_of p -> Nmty_of (f p)
-    | Nmty_strengthened (p,t) -> Nmty_strengthened (f p,t)
-    | Nmty_dot (p,s) -> Nmty_dot (map_typed_path f p,s)
-    | Nmty_apply (p,q) -> Nmty_apply (map_typed_path f p, f q)
-    in
-    let map_definition f g = function
-    | Nmc_module p -> Nmc_module (map_typed_path f p)
-    | Nmc_strengthen (p,a) -> Nmc_strengthen (f p, a)
-    | Nmc_type p -> Nmc_type (g p)
-    in
-    let map_module_constraint f g (ns,def) = (ns, map_definition f g def) in
-    Option.map (fun(cs,sg) -> (List.map (map_module_constraint f g) cs, sg))  
+  let add cs ds = ds @ cs
 
-  let map_nominal f g = Option.map (fun (cs,sg) -> (List.map f cs, g sg))
+  let append cs ds = cs @ ds
 
-  let add nom cs f = match nom with
-  | None -> Some (cs, f None)
-  | Some (ds,ty) -> Some (ds @ cs, f (Some ty))
-
-  let append nom1 nom2 =
-    match nom1, nom2 with
-    | Some (cs,_), Some (ds,sg) -> Some (cs @ ds, sg)
-    | None, nom -> nom
-    | nom, None -> nom
-
-  let make cs sg = Some (cs,sg)
+  let make cs = cs
 end
 
 type module_type =

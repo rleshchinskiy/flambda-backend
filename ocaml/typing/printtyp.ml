@@ -32,21 +32,16 @@ let rl_print_uniques = Option.is_some (Sys.getenv_opt "RL_PRINT_UNIQUES")
 
 let rl_ident_name = if rl_print_uniques then Ident.unique_name else  Ident.name
 
+type rl_print_with =
+  | Rlpw_with_only
+  | Rlpw_expand_only
+  | Rlpw_both
+
 let rl_print_with =
   match Sys.getenv_opt "RL_PRINT_WITH" with
-  | None -> Option.is_some (Sys.getenv_opt "RL_WITH")
-  | Some s -> not (String.equal s "0")
-
-type rl_print_expand =
-  | Rlpe_dont
-  | Rlpe_expand
-  | Rlpe_equivalent
-
-let rl_print_expand =
-  match Sys.getenv_opt "RL_PRINT_EXPAND" with
-  | Some "0" | Some "no" -> Rlpe_dont
-  | Some "x" -> Rlpe_expand
-  | _ -> Rlpe_equivalent
+  | Some "w" -> Rlpw_with_only
+  | Some "b" -> Rlpw_both
+  | _ -> Rlpw_expand_only
 
 (* Print a long identifier *)
 
@@ -1906,10 +1901,9 @@ let add_sigitem env x =
 
 let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_ident (p, nom) ->
-    let mty = match rl_print_expand with
-      | Rlpe_equivalent -> Types.Nominal.equivalent_type nom
-      | Rlpe_dont -> None
-      | Rlpe_expand -> 
+    let mty = match rl_print_with with
+      | Rlpw_with_only -> None
+      | Rlpw_expand_only | Rlpw_both -> 
           begin match Types.Nominal.constraints nom with
             | [] -> None
             | _ ->
@@ -1920,9 +1914,9 @@ let rec tree_of_modtype ?(ellipsis=false) = function
     in
     let t = Option.map (tree_of_modtype ~ellipsis) mty
     in
-    begin match t with
-    | Some t when not rl_print_with -> t
-    | _ ->
+    begin match t, rl_print_with with
+    | Some t, Rlpw_expand_only -> t
+    | _, _ ->
       let path = tree_of_path Module_type p
       in
       let cs = List.map (tree_of_module_constraint ~ellipsis) (Types.Nominal.constraints nom)
