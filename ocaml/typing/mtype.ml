@@ -252,7 +252,7 @@ let rec make_aliases_absent pres mty =
       let recurse mty =
         let _, mty = make_aliases_absent pres mty in mty
       in
-      pres, MtyL_ident (p, Nominal.map_equivalent_type recurse nom)
+      pres, MtyL_ident (p, Nominal.map recurse nom)
 
 and make_aliases_absent_sig sg =
   let open Subst.Lazy in
@@ -985,7 +985,7 @@ let collect_arg_paths mty =
   let it_path p = paths := Path.Set.union (get_arg_paths p) !paths
   and it_signature_item it si =
     type_iterators.it_signature_item it si;
-    let rec module_type id = function
+    let module_type id = function
       | Mty_alias p ->
           bindings := Ident.add id p !bindings
       | Mty_signature sg ->
@@ -995,8 +995,7 @@ let collect_arg_paths mty =
                   Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
               | _ -> ())
             sg
-      | Mty_ident (_,nom) ->
-          Nominal.equivalent_type nom |> Option.iter (module_type id)
+      (* RL FIXME: This is probably very wrong for with constraints? *)
       | _ -> ()
     in
     match si with
@@ -1021,7 +1020,7 @@ let rec remove_aliases_mty env args pres mty =
       Mty_signature sg ->
         Mp_present, Mty_signature (remove_aliases_sig env args' sg)
     | Mty_ident (p,nom) ->
-        Mp_present, Mty_ident (p, Nominal.map_equivalent_type (
+        Mp_present, Mty_ident (p, Nominal.map (
           fun mty -> remove_aliases_mty env args' pres mty |> snd) nom)
     | Mty_alias _ ->
         let mty' = Env.scrape_alias env mty in
