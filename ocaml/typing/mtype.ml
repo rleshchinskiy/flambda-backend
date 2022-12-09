@@ -600,6 +600,13 @@ let expand_modtype_with env p nom =
       | None -> expand ()
   *)
 
+let rec expand_modtype env = function
+  | Mty_ident (p,nom) as mty ->
+      begin match expand_modtype_with env p nom with
+      | Some mty -> expand_modtype env mty
+      | None -> mty
+      end
+  | mty -> mty
 
 (*
 let unfold_signature env subst ~aliasable sg =
@@ -978,7 +985,7 @@ let collect_arg_paths mty =
   let it_path p = paths := Path.Set.union (get_arg_paths p) !paths
   and it_signature_item it si =
     type_iterators.it_signature_item it si;
-    let rec it_module_type id = function
+    let rec module_type id = function
       | Mty_alias p ->
           bindings := Ident.add id p !bindings
       | Mty_signature sg ->
@@ -989,11 +996,11 @@ let collect_arg_paths mty =
               | _ -> ())
             sg
       | Mty_ident (_,nom) ->
-          Nominal.equivalent_type nom |> Option.iter (it_module_type id)
+          Nominal.equivalent_type nom |> Option.iter (module_type id)
       | _ -> ()
     in
     match si with
-    | Sig_module (id, _, {md_type=mty}, _, _) -> it_module_type id mty
+    | Sig_module (id, _, {md_type=mty}, _, _) -> module_type id mty
     | _ -> ()
   in
   let it = {type_iterators with it_path; it_signature_item} in

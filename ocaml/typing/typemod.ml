@@ -117,13 +117,6 @@ let extract_sig env loc mty =
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
-  (*
-  | Mty_ident (_,nom) ->
-      begin match Nominal.equivalent_type nom with
-      | Some (Mty_signature sg) -> sg
-      | _ -> raise(Error(loc, env, Signature_expected))
-      end
-  *)
   | _ -> raise(Error(loc, env, Signature_expected))
 
 let extract_sig_open env loc mty =
@@ -131,13 +124,6 @@ let extract_sig_open env loc mty =
     Mty_signature sg -> sg
   | Mty_alias path ->
       raise(Error(loc, env, Cannot_scrape_alias path))
-  (*
-  | Mty_ident (_,nom) as mty ->
-      begin match Nominal.equivalent_type nom with
-      | Some (Mty_signature sg) -> sg
-      | _ -> raise(Error(loc, env, Structure_expected mty))
-      end
-  *)
   | mty -> raise(Error(loc, env, Structure_expected mty))
 
 (* Extract the signature of a functor's body, using the provided [sig_acc]
@@ -147,13 +133,8 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
   match Env.scrape_alias env mty with
   | Mty_functor (Named (param, mty_param),mty_result) as mty_func ->
       let sg_param =
-        match Mtype.scrape env mty_param with
+        match Mtype.expand_modtype env mty_param with
         | Mty_signature sg_param -> sg_param
-        | Mty_ident (_,nom) ->
-          begin match Nominal.equivalent_type nom with
-          | Some (Mty_signature sg) -> sg
-          | _ -> raise(Error(loc, env, Signature_parameter_expected mty_func))
-          end
         | _ -> raise (Error (loc,env,Signature_parameter_expected mty_func))
       in
       let coercion =
@@ -180,20 +161,15 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
               sig..end -> sig..end
            and
               sig..end -> () -> sig..end *)
-        match Mtype.scrape extended_env mty_result with
+        match Mtype.expand_modtype extended_env mty_result with
         | Mty_signature sg_result -> Tincl_functor coercion, sg_result
         | Mty_functor (Unit,_) when funct_body && Mtype.contains_type env mty ->
             raise (Error (loc, env, Not_includable_in_functor_body))
         | Mty_functor (Unit,mty_result) -> begin
-            match Mtype.scrape extended_env mty_result with
+            match Mtype.expand_modtype extended_env mty_result with
             | Mty_signature sg_result -> Tincl_gen_functor coercion, sg_result
             | sg -> raise (Error (loc,env,Signature_result_expected
                                             (Mty_functor (Unit,sg))))
-          end
-        | Mty_ident (_,nom) as sg ->
-          begin match Nominal.equivalent_type nom with
-          | Some (Mty_signature sg_result) -> Tincl_functor coercion, sg_result
-          | _ -> raise (Error (loc,env,Signature_result_expected sg))
           end
         | sg -> raise (Error (loc,env,Signature_result_expected sg))
       in
@@ -2007,10 +1983,31 @@ let path_of_module mexp =
 
 let rec nongen_modtype env f = function
     Mty_ident (_,nom) ->
-      begin match Nominal.equivalent_type nom with
-      | Some mty -> nongen_modtype env f mty
-      | None -> false
-      end
+      (* RL FIXME: It's possible that the expansion of a type with constraints
+          doesn't contain non-gen tyvars even if the individual components do.
+          Do we need to return a module_type option here which expands as much
+          as necessary to get rid of non-gen tyvars? *)
+      let rec nongen_tpath = function
+      | Nominal.Nmty_of _ -> false
+      | Nominal.Nmty_strengthened (_,mty) ->
+          (* RL FIXME: Is this correct? What if the constraint doesn't
+             change the underlying type? *)
+          nongen_modtype env f mty
+      | Nominal.Nmty_dot (tp,_) ->
+          (* RL FIXME: What if tp does constan a non-gen tyvar but the
+             projection doesn't? *)
+          nongen_tpath tp
+      | Nominal.Nmty_apply (tp,_) ->
+          (* RL FIXME: What if tp does constan a non-gen tyvar but the
+             application doesn't? *)
+          nongen_tpath tp
+      in
+      let nongen_constraint = function
+      | _, Nominal.Nmc_module tp -> nongen_tpath tp
+      | _, Nominal.Nmc_strengthen _ -> false
+      | _, Nominal.Nmc_type _ -> false
+      in
+      List.exists nongen_constraint (Nominal.constraints nom)
   | Mty_alias _ -> false
   | Mty_signature sg ->
       let env = Env.add_signature sg env in
@@ -2217,15 +2214,11 @@ let rec package_constraints_sig env loc sg constrs =
 and package_constraints env loc mty constrs =
   if constrs = [] then mty
   else begin
-    match Mtype.scrape env mty with
+    match Mtype.expand_modtype env mty with
     | Mty_signature sg ->
         Mty_signature (package_constraints_sig env loc sg constrs)
     | Mty_functor _ | Mty_alias _ -> assert false
-    | Mty_ident (p,nom) ->
-      begin match Nominal.equivalent_type nom with
-      | Some mty -> package_constraints env loc mty constrs
-      | None -> raise(Error(loc, env, Cannot_scrape_package_type p))
-      end
+    | Mty_ident (p,_) -> raise(Error(loc, env, Cannot_scrape_package_type p))
   end
 
 let modtype_of_package env loc p fl =
@@ -3066,7 +3059,19 @@ let type_structure = type_structure false None
 
 let rec normalize_modtype = function
   | Mty_ident (_,nom) ->
-      Option.iter normalize_modtype (Nominal.equivalent_type nom)
+      let rec normalize_tpath = function
+      | Nominal.Nmty_of _ -> ()
+      | Nominal.Nmty_strengthened (_,mty) -> normalize_modtype mty
+      | Nominal.Nmty_dot (tp,_) -> normalize_tpath tp
+      | Nominal.Nmty_apply (tp,_) -> normalize_tpath tp
+      in
+      let normalize_module_constraint = function
+      | _, Nominal.Nmc_module tp -> normalize_tpath tp
+      | _, Nominal.Nmc_strengthen _ -> ()
+      | _, Nominal.Nmc_type _ -> ()
+      in
+      List.iter normalize_module_constraint (Nominal.constraints nom) ;
+      Option.iter normalize_modtype (Nominal.equivalent_type nom) (* RL can be removed *)
   | Mty_alias _ -> ()
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body

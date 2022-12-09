@@ -377,11 +377,9 @@ let rec trim_signature = function
                  Sig_modtype (id, Modtype_manifest (trim_modtype mty))*)
              | item -> item)
            sg)
-  | Mty_ident (_,nom) as mty ->
-    begin match Nominal.equivalent_type nom with
-    | Some mty -> trim_signature mty
-    | None -> mty
-    end
+  | Mty_ident (p,nom) ->
+      (* RL FIXME: Is this right? Do we need to expand? *)
+      Mty_ident (p, Nominal.map_equivalent_type trim_signature nom)
   | mty -> mty
 
 let show_prim to_sig ppf lid =

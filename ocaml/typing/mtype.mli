@@ -37,6 +37,7 @@ val strengthen_decl:
 
 val expand_lazy_modtype_with : Env.t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option
 val expand_modtype_with : Env.t -> Path.t -> nominal -> module_type option
+val expand_modtype : Env.t -> module_type -> module_type
 val expand_alias_and_with_lazy : Env.t -> Subst.Lazy.modtype -> Subst.Lazy.modtype
 val expand_alias_and_with : Env.t -> module_type -> module_type
 
