@@ -35,23 +35,6 @@ let rl_pr8548 =
 
 let rl_expanding = ref false
 
-let rec scrape_lazy env mty =
-  let open Subst.Lazy in
-  match mty with
-    MtyL_ident (p, nom) when Nominal.is_empty nom ->
-      begin try
-        scrape_lazy env (Env.find_modtype_expansion_lazy p env)
-      with Not_found ->
-        mty
-      end
-  | _ -> mty
-
-let scrape env mty =
-  match mty with
-    Mty_ident (p, nom) when Nominal.is_empty nom ->
-     Subst.Lazy.force_modtype (scrape_lazy env (MtyL_ident (p, Nominal.empty)))
-  | _ -> mty
-
 let freshen ~scope mty =
   Subst.modtype (Rescope scope) Subst.identity mty
 
@@ -534,7 +517,7 @@ and expand_lazy_modtype_with env p nom =
     | exception Not_found -> None
   in
   begin
-    let debug = rl_debugging && not !rl_expanding in
+    let debug = rl_debugging && not (Nominal.is_empty nom) && not !rl_expanding in
     if debug then (rl_expanding := true);
     if debug then (
       Format.printf "@[<hv 2>expanding %a@]@."
@@ -581,6 +564,23 @@ let expand_modtype_with env p nom =
       | None -> expand ()
   *)
 
+let rec scrape_lazy env mty =
+  let open Subst.Lazy in
+  match mty with
+    MtyL_ident (p, nom) ->
+      begin match expand_lazy_modtype_with env p nom with
+      | Some mty -> scrape_lazy env mty
+      | None -> mty
+      end
+  | _ -> mty
+
+let scrape env mty =
+  match mty with
+    Mty_ident (p, nom) when Nominal.is_empty nom ->
+      Subst.Lazy.force_modtype (scrape_lazy env (MtyL_ident (p, Nominal.empty)))
+  | _ -> mty
+
+(*
 let rec expand_modtype env = function
   | Mty_ident (p,nom) as mty ->
       begin match expand_modtype_with env p nom with
@@ -588,6 +588,7 @@ let rec expand_modtype env = function
       | None -> mty
       end
   | mty -> mty
+*)
 
 (*
 let unfold_signature env subst ~aliasable sg =

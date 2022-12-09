@@ -133,7 +133,7 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
   match Env.scrape_alias env mty with
   | Mty_functor (Named (param, mty_param),mty_result) as mty_func ->
       let sg_param =
-        match Mtype.expand_modtype env mty_param with
+        match Mtype.scrape env mty_param with
         | Mty_signature sg_param -> sg_param
         | _ -> raise (Error (loc,env,Signature_parameter_expected mty_func))
       in
@@ -161,12 +161,12 @@ let extract_sig_functor_open funct_body env loc mty sig_acc =
               sig..end -> sig..end
            and
               sig..end -> () -> sig..end *)
-        match Mtype.expand_modtype extended_env mty_result with
+        match Mtype.scrape extended_env mty_result with
         | Mty_signature sg_result -> Tincl_functor coercion, sg_result
         | Mty_functor (Unit,_) when funct_body && Mtype.contains_type env mty ->
             raise (Error (loc, env, Not_includable_in_functor_body))
         | Mty_functor (Unit,mty_result) -> begin
-            match Mtype.expand_modtype extended_env mty_result with
+            match Mtype.scrape extended_env mty_result with
             | Mty_signature sg_result -> Tincl_gen_functor coercion, sg_result
             | sg -> raise (Error (loc,env,Signature_result_expected
                                             (Mty_functor (Unit,sg))))
@@ -2218,7 +2218,7 @@ let rec package_constraints_sig env loc sg constrs =
 and package_constraints env loc mty constrs =
   if constrs = [] then mty
   else begin
-    match Mtype.expand_modtype env mty with
+    match Mtype.scrape env mty with
     | Mty_signature sg ->
         Mty_signature (package_constraints_sig env loc sg constrs)
     | Mty_functor _ | Mty_alias _ -> assert false
