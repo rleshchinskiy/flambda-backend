@@ -395,7 +395,7 @@ let retrieve_functor_params env mty =
   let rec retrieve_functor_params before env =
     function
     | Mty_ident (p, nom) as res ->
-        begin match Mtype.expand_modtype_with env p nom with
+        begin match Mtype.expand_nominal env p nom with
         | Some mty -> retrieve_functor_params before env mty
         | None -> List.rev before, res
         end
@@ -532,7 +532,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
         Format.printf "@[<hv 2>expandL %a@]@."
           Printtyp.modtype (Mty_ident (p1,nom))
       );
-      begin match Mtype.expand_modtype_with env p1 nom with
+      begin match Mtype.expand_nominal env p1 nom with
       | Some mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
       | None -> Error (Error.Mt_core Abstract_module_type)
       end
@@ -553,7 +553,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       Format.printf "@[<hv 2>expandR %a@]@."
         Printtyp.modtype (Mty_ident (p2,nom))
     );
-    begin match Mtype.expand_modtype_with env p2 nom with
+    begin match Mtype.expand_nominal env p2 nom with
     | Some mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
     | None ->
         begin match mty1 with

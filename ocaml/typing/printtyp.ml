@@ -1909,7 +1909,7 @@ let rec tree_of_modtype ?(ellipsis=false) = function
             | _ ->
               let env = !printing_env
               in
-              !Env.expand_modtype_with env p nom
+              !Env.expand_nominal env p nom
           end
     in
     let t = Option.map (tree_of_modtype ~ellipsis) mty

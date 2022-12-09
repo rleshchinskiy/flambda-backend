@@ -810,7 +810,7 @@ let expand_lazy_modtype_with =
   ref ((fun _env _p _nom -> assert false) :
         t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option)
 
-let expand_modtype_with =
+let expand_nominal =
   (* to be filled with Mtype.expand_lazy_modtype_with *)
   ref ((fun _env _p _nom -> assert false) :
         t -> Path.t -> nominal -> module_type option)
@@ -1785,8 +1785,7 @@ let is_identchar c =
 let rec components_of_module_maker
           {cm_env; cm_prefixing_subst;
            cm_path; cm_addr; cm_mty; cm_shape} : _ result =
-  let rec components (mty : Subst.Lazy.modtype) : _ result =
-  match scrape_alias cm_env mty with
+  match scrape_alias cm_env cm_mty with
   | MtyL_signature sg ->
       let c =
         { comp_values = NameMap.empty;
@@ -1965,24 +1964,8 @@ let rec components_of_module_maker
           fcomp_shape = cm_shape;
           fcomp_cache = Hashtbl.create 17;
           fcomp_subst_cache = Hashtbl.create 17 })
-  (* | MtyL_ident _ -> Error No_components_abstract *)
-  | MtyL_ident (p,nom) ->
-    begin match !expand_lazy_modtype_with cm_env p nom with
-    | Some mty -> components mty
-    | None -> Error No_components_abstract
-    end
+  | MtyL_ident _ -> Error No_components_abstract
   | MtyL_alias p -> Error (No_components_alias p)
-  in
-  components cm_mty
-  (* 
-  match scrape_alias cm_env cm_mty with
-  | MtyL_ident (_,nom) as mty ->
-      begin match Nominal.signature nom with
-      | Some sg -> components (Subst.Lazy.MtyL_signature sg)
-      | None -> components mty
-      end
-  | mty -> components mty
-  *)
 
 (* Insertion of bindings by identifier + path *)
 

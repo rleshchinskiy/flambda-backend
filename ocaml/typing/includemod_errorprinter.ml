@@ -142,9 +142,9 @@ module Illegal_permutation = struct
      a [pos] path *)
   let rec find env ctx path (mt:Types.module_type) = match mt, path with
     | Mty_ident (p,nom), _ ->
-      begin match Mtype.expand_modtype_with env p nom with
-      | Some mty -> find env ctx path mty
+      begin match Mtype.expand_nominal env p nom with
       | None -> raise Not_found
+      | Some mt -> find env ctx path mt
       end
     | Mty_alias p, _ ->
         begin match (Env.find_modtype p env).mtd_type with

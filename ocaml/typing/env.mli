@@ -489,7 +489,7 @@ val strengthen:
 val expand_lazy_modtype_with:
     (t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option) ref
 (* Forward declaration to break mutual recursion with Mtype. *)
-val expand_modtype_with:
+val expand_nominal:
     (t -> Path.t -> nominal -> module_type option) ref
 (* Forward declaration to break mutual recursion with Ctype. *)
 val same_constr: (t -> type_expr -> type_expr -> bool) ref
