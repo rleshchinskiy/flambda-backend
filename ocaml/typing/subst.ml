@@ -467,7 +467,7 @@ module Lazy_types = struct
 
   and nominal = modtype Types.Nominal.nominal
 
-  and module_constraint = modtype Types.Nominal.module_constraint
+  and module_with = modtype Types.Nominal.module_with
 
   and modtype_declaration =
     {
@@ -586,12 +586,14 @@ and subst_lazy_nominal scoping s =
     | Nmty_dot (p,s) -> Nmty_dot (typed_path p,s)
     | Nmty_apply (p,q) -> Nmty_apply (typed_path p, module_path s q)
   in
-  let definition = function
-    | Nmc_module p -> Nmc_module (typed_path p)
-    | Nmc_strengthen (p,a) -> Nmc_strengthen (module_path s p, a)
-    | Nmc_type p -> Nmc_type (type_path s p)
+  let module_with = function
+    | Withc_module (Withmod_path p) ->
+        Withc_module (Withmod_path (typed_path p))
+    | Withc_module (Withmod_strengthen (p,a)) ->
+        Withc_module (Withmod_strengthen (module_path s p, a))
+    | Withc_type p -> Withc_type (type_path s p)
   in
-  map_nominal (fun (ns,def) -> (ns, definition def))
+  map_nominal (fun (ns,def) -> (ns, module_with def))
 
 and lazy_modtype = function
   | Mty_ident (p, nom) -> MtyL_ident (p, lazy_nominal nom)

@@ -381,9 +381,11 @@ let type_iterators =
         it.it_path p;
         List.iter
           (function
-            | _, Nominal.Nmc_module p -> it.it_path (Nominal.untyped_path p)
-            | _, Nominal.Nmc_strengthen (p,_) -> it.it_path p
-            | _, Nominal.Nmc_type p -> it.it_path p
+            | _, Nominal.Withc_module (Nominal.Withmod_path p) ->
+              it.it_path (Nominal.untyped_path p)
+            | _, Nominal.Withc_module (Nominal.Withmod_strengthen (p,_)) ->
+              it.it_path p
+            | _, Nominal.Withc_type p -> it.it_path p
           )
           (Nominal.constraints nom)
       (*

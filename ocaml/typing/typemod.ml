@@ -769,7 +769,7 @@ let merge_constraint initial_env loc sg lid constr =
               | Rl_with_strengthened, _ ->
                   Some (Nominal.Nmty_strengthened (wm.path,wm.md.md_type))
             in
-            Option.map (fun tp -> (namelist, Nominal.Nmc_module tp)) tp
+            Option.map (fun tp -> (namelist, Nominal.Withc_module (Nominal.Withmod_path tp))) tp
         | _, _ -> None
         in
         x, nom, sg
@@ -2004,9 +2004,9 @@ let rec nongen_modtype env f = function
           nongen_tpath tp
       in
       let nongen_constraint = function
-      | _, Nominal.Nmc_module tp -> nongen_tpath tp
-      | _, Nominal.Nmc_strengthen _ -> false
-      | _, Nominal.Nmc_type _ -> false
+      | _, Nominal.Withc_module (Nominal.Withmod_path tp) -> nongen_tpath tp
+      | _, Nominal.Withc_module (Nominal.Withmod_strengthen _) -> false
+      | _, Nominal.Withc_type _ -> false
       in
       List.exists nongen_constraint (Nominal.constraints nom)
   | Mty_alias _ -> false
@@ -3066,9 +3066,9 @@ let rec normalize_modtype = function
       | Nominal.Nmty_apply (tp,_) -> normalize_tpath tp
       in
       let normalize_module_constraint = function
-      | _, Nominal.Nmc_module tp -> normalize_tpath tp
-      | _, Nominal.Nmc_strengthen _ -> ()
-      | _, Nominal.Nmc_type _ -> ()
+      | _, Nominal.Withc_module (Nominal.Withmod_path tp) -> normalize_tpath tp
+      | _, Nominal.Withc_module (Nominal.Withmod_strengthen _) -> ()
+      | _, Nominal.Withc_type _ -> ()
       in
       List.iter normalize_module_constraint (Nominal.constraints nom)
   | Mty_alias _ -> ()

@@ -1919,32 +1919,10 @@ let rec tree_of_modtype ?(ellipsis=false) = function
     | _, _ ->
       let path = tree_of_path Module_type p
       in
-      let cs = List.map (tree_of_module_constraint ~ellipsis) (Types.Nominal.constraints nom)
+      let cs = List.map (tree_of_module_with ~ellipsis) (Types.Nominal.constraints nom)
       in
       Omty_ident (path, cs, t)
     end
-    (*
-      let mty = match rl_print_expand, Types.Nominal.constraints nom with
-        | Rlpe_equivalent, _ -> Nominal.equivalent_type nom
-        | _, [] -> None
-        | Rlpe_dont, _ -> None
-        | Rlpe_expand, _ ->
-            let env = !printing_env
-            in
-            !Env.expand_modtype_with env p nom
-      in
-      let t = Option.map (tree_of_modtype ~ellipsis) mty
-      in
-      begin match t with
-      | Some t when not rl_print_with -> t
-      | _ ->
-        let id = tree_of_path Module p
-        in
-        let cs = List.map (tree_of_module_constraint ~ellipsis) (Types.Nominal.constraints nom)
-        in
-        Omty_ident (id, cs, t)
-      end
-    *)
   | Mty_signature sg ->
       Omty_signature (if ellipsis then [Osig_ellipsis]
                       else tree_of_signature sg)
@@ -1964,12 +1942,12 @@ and tree_of_typed_path ?(ellipsis=false) = function
   | Types.Nominal.Nmty_apply (p,q) ->
       Otp_apply (tree_of_typed_path ~ellipsis p, tree_of_path Module q)
 
-and tree_of_module_constraint ?(ellipsis=false) = function
-  | ns, Types.Nominal.Nmc_module p ->
+and tree_of_module_with ?(ellipsis=false) = function
+  | ns, Types.Nominal.Withc_module (Types.Nominal.Withmod_path p) ->
       Omc_module (ns, tree_of_typed_path ~ellipsis p)
-  | ns, Types.Nominal.Nmc_strengthen (p,a) ->
+  | ns, Types.Nominal.Withc_module (Types.Nominal.Withmod_strengthen (p,a)) ->
       Omc_strengthen (ns, tree_of_path Module p, a)
-  | ns, Types.Nominal.Nmc_type p -> Omc_type (ns, tree_of_path Type p)
+  | ns, Types.Nominal.Withc_type p -> Omc_type (ns, tree_of_path Type p)
 
 and tree_of_functor_parameter = function
   | Unit ->
@@ -2088,12 +2066,12 @@ let print_signature ppf tree =
 let signature ppf sg =
   fprintf ppf "%a" print_signature (tree_of_signature sg)
 
-let module_constraint ppf c =
-  !Oprint.out_module_constraint ppf (tree_of_module_constraint c)
+let module_with ppf c =
+  !Oprint.out_module_with ppf (tree_of_module_with c)
 
 let nominal_type ppf (p,nom) =
   !Oprint.out_module_type ppf
-    (Omty_ident (tree_of_path Module p, List.map tree_of_module_constraint (Nominal.constraints nom), None))
+    (Omty_ident (tree_of_path Module p, List.map tree_of_module_with (Nominal.constraints nom), None))
 
 (* Print a signature body (used by -i when compiling a .ml) *)
 let printed_signature sourcefile ppf sg =

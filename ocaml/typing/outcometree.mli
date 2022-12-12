@@ -120,14 +120,14 @@ type out_with_kind =
 type out_module_type =
   | Omty_abstract
   | Omty_functor of (string option * out_module_type) option * out_module_type
-  | Omty_ident of out_ident * out_module_constraint list * out_module_type option
+  | Omty_ident of out_ident * out_module_with list * out_module_type option
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
 and out_typed_path =
   | Otp_strengthened of out_ident * out_module_type
   | Otp_dot of out_typed_path * string
   | Otp_apply of out_typed_path * out_ident
-and out_module_constraint =
+and out_module_with =
   | Omc_module of string list * out_typed_path
   | Omc_strengthen of string list * out_ident * bool
   | Omc_type of string list * out_ident

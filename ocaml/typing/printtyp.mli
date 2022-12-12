@@ -160,7 +160,7 @@ val tree_of_module:
     Ident.t -> ?ellipsis:bool -> module_type -> rec_status -> out_sig_item
 val modtype: formatter -> module_type -> unit
 val signature: formatter -> signature -> unit
-val module_constraint: formatter -> module_constraint -> unit
+val module_with: formatter -> module_with -> unit
 val nominal_type: formatter -> (Path.t * nominal) -> unit
 val tree_of_modtype: module_type -> out_module_type
 val tree_of_modtype_declaration:

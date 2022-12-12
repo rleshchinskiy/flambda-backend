@@ -339,14 +339,17 @@ module Nominal = struct
     | Nmty_dot of 'a typed_path * string
     | Nmty_apply of 'a typed_path * Path.t
 
-  type 'a definition =
-    | Nmc_module of 'a typed_path
-    | Nmc_strengthen of Path.t * bool
-    | Nmc_type of Path.t
+  type 'a with_module =
+    | Withmod_path of 'a typed_path
+    | Withmod_strengthen of Path.t * bool
 
-  type 'a module_constraint = string list * 'a definition
+  type 'a with_constraint =
+    | Withc_module of 'a with_module
+    | Withc_type of Path.t
 
-  type 'a nominal = 'a module_constraint list
+  type 'a module_with = string list * 'a with_constraint
+
+  type 'a nominal = 'a module_with list
 
   let rec untyped_path = function
   | Nmty_strengthened (p,_) -> p
@@ -366,11 +369,15 @@ module Nominal = struct
     | Nmty_dot (p,s) -> Nmty_dot (map_typed_path f p,s)
     | Nmty_apply (p,q) -> Nmty_apply (map_typed_path f p, q)
     in
-    let map_definition f = function
-    | Nmc_module p -> Nmc_module (map_typed_path f p)
-    | Nmc_strengthen _ | Nmc_type _ as x -> x
+    let map_with_module = function
+      | Withmod_path p -> Withmod_path (map_typed_path f p)
+      | Withmod_strengthen _ as x -> x
     in
-    List.map (fun (ns,def) -> (ns, map_definition f def))
+    let map_with = function
+      | Withc_module wm -> Withc_module (map_with_module wm)
+      | Withc_type _ as x -> x
+    in
+    List.map (fun (ns,constr) -> (ns, map_with constr))
   
   let map_nominal f = List.map f
 
@@ -435,8 +442,7 @@ and ext_status =
   | Text_next                      (* not first constructor of an extension *)
   | Text_exception                 (* an exception *)
 
-
-type module_constraint = module_type Nominal.module_constraint  
+type module_with = module_type Nominal.module_with  
 
 (* Constructor and record label descriptions inserted held in typing
    environments *)

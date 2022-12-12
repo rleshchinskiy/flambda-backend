@@ -525,8 +525,8 @@ let out_signature = ref (fun _ -> failwith "Oprint.out_signature")
 let out_type_extension = ref (fun _ -> failwith "Oprint.out_type_extension")
 let out_functor_parameters =
   ref (fun _ -> failwith "Oprint.out_functor_parameters")
-let out_module_constraint =
-  ref (fun _ -> failwith "Oprint.out_module_constraint")
+let out_module_with =
+  ref (fun _ -> failwith "Oprint.out_module_with")
   
 
 (* For anonymous functor arguments, the logic to choose between
@@ -621,7 +621,7 @@ and print_simple_out_module_type ppf =
         | c :: cs -> 
           fprintf ppf "@ %s %a%a"
             sep
-            print_out_module_constraint c
+            print_out_module_with c
             (print_constrs "and") cs
       in
       begin match mty, cs with
@@ -655,7 +655,7 @@ and print_out_typed_path ppf =
       fprintf ppf "%a(%a)"
       print_out_typed_path p
         print_ident q
-and print_out_module_constraint ppf =
+and print_out_module_with ppf =
   let dotted ns = String.concat "." ns in
   function
   | Omc_module (ns,p) ->
@@ -925,7 +925,7 @@ let _ = out_signature := print_out_signature
 let _ = out_sig_item := print_out_sig_item
 let _ = out_type_extension := print_out_type_extension
 let _ = out_functor_parameters := print_out_functor_parameters
-let _ = out_module_constraint := print_out_module_constraint
+let _ = out_module_with := print_out_module_with
 
 (* Phrases *)
 

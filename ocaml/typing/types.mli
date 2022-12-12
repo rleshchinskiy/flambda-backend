@@ -616,24 +616,27 @@ module Nominal : sig
     | Nmty_dot of 'a typed_path * string
     | Nmty_apply of 'a typed_path * Path.t
 
-  type 'a definition =
-    | Nmc_module of 'a typed_path
-    | Nmc_strengthen of Path.t * bool
-    | Nmc_type of Path.t
+  type 'a with_module =
+    | Withmod_path of 'a typed_path
+    | Withmod_strengthen of Path.t * bool
 
-  type 'a module_constraint = string list * 'a definition
+  type 'a with_constraint =
+    | Withc_module of 'a with_module
+    | Withc_type of Path.t
+
+  type 'a module_with = string list * 'a with_constraint
 
   type 'a nominal
 
   val empty : 'a nominal
   val is_empty : 'a nominal -> bool
-  val constraints : 'a nominal -> 'a module_constraint list
+  val constraints : 'a nominal -> 'a module_with list
   val map : ('a -> 'b) -> 'a nominal -> 'b nominal
-  val map_nominal : ('a module_constraint -> 'a module_constraint) -> 'a nominal -> 'a nominal
-  val add : 'a nominal -> 'a module_constraint list -> 'a nominal
+  val map_nominal : ('a module_with -> 'a module_with) -> 'a nominal -> 'a nominal
+  val add : 'a nominal -> 'a module_with list -> 'a nominal
   val append : 'a nominal -> 'a nominal -> 'a nominal
 
-  val make : 'a module_constraint list -> 'a nominal
+  val make : 'a module_with list -> 'a nominal
 
   val untyped_path : 'a typed_path -> Path.t
 end
@@ -692,7 +695,7 @@ and ext_status =
   | Text_next                      (* not first constructor in an extension *)
   | Text_exception
 
-type module_constraint = module_type Nominal.module_constraint
+type module_with = module_type Nominal.module_with
 
 val item_visibility : signature_item -> visibility
 

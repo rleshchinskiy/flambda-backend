@@ -106,7 +106,7 @@ module Lazy : sig
 
   and nominal = modtype Types.Nominal.nominal
 
-  and module_constraint = modtype Types.Nominal.module_constraint
+  and module_with = modtype Types.Nominal.module_with
 
   and modtype_declaration =
     {
