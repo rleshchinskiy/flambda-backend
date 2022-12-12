@@ -579,18 +579,16 @@ and force_nominal nom = Nominal.map force_modtype nom
 
 and subst_lazy_nominal scoping s =
   let open Types.Nominal in
-  let rec typed_path = function
-    | Nmty_strengthened (p,mty) ->
-        let mty = subst_lazy_modtype scoping s mty in
-        Nmty_strengthened (module_path s p, mty)
-    | Nmty_dot (p,s) -> Nmty_dot (typed_path p,s)
-    | Nmty_apply (p,q) -> Nmty_apply (typed_path p, module_path s q)
+  let rec transform = function
+    | Mtt_lookup -> Mtt_lookup
+    | Mtt_exactly mty -> Mtt_exactly (subst_lazy_modtype scoping s mty)
+    | Mtt_strengthen (t,p,a) -> Mtt_strengthen (transform t, module_path s p, a)
+    | Mtt_dot (t,s) -> Mtt_dot (transform t, s)
+    | Mtt_apply (t,p) -> Mtt_apply (transform t, module_path s p)
   in
   let module_with = function
-    | Withc_module (Withmod_path p) ->
-        Withc_module (Withmod_path (typed_path p))
-    | Withc_module (Withmod_strengthen (p,a)) ->
-        Withc_module (Withmod_strengthen (module_path s p, a))
+    | Withc_module t ->
+        Withc_module (transform t)
     | Withc_type p -> Withc_type (type_path s p)
   in
   map_nominal (fun (ns,def) -> (ns, module_with def))

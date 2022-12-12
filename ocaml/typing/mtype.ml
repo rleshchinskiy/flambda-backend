@@ -106,7 +106,8 @@ and strengthen_lazy_sig' ~aliasable env sg p =
         in
         let env =
           Env.add_module_declaration_lazy ~update_summary:false id pres md env in
-        let bind = ([Ident.name id], Nominal.Withc_module (Withmod_strengthen (name, aliasable))) in
+        let constr = Nominal.Withc_module (Mtt_strengthen (Mtt_lookup, name, aliasable)) in
+        let bind = ([Ident.name id], constr) in
         ((env, add_with bind withs), Some (SigL_module(id, pres, str, rs, vis)))
         (* Need to add the module in case it defines manifest module types *)
     | SigL_modtype(id, decl, vis) ->
@@ -173,26 +174,37 @@ and constrain_signature env constr sg =
 and constrain_sig_item constr env item =
   let open Subst.Lazy in
   match constr, item with
-  | ([s], Nominal.Withc_module wm), SigL_module(id, pres, md, rs, vis)
+  | ([s], Nominal.Withc_module t), SigL_module(id, pres, md, rs, vis)
     when Ident.name id = s ->
     let open Nominal in
-    let str = match wm with
-      | Withmod_strengthen (p, aliasable) ->
-        strengthen_lazy_decl ~aliasable env md p
-
-      | Withmod_path p ->
+    (*
+      let md' = match md.mdl_type with
+  | MtyL_alias _ -> md
+  | _ when aliasable -> {md with mdl_type = MtyL_alias p}
+  | mty -> {md with mdl_type = strengthen_lazy ~aliasable env mty p}
+  *)
+    let rec constrain = function
+      | Mtt_lookup -> md.mdl_type
+      | Mtt_exactly mty -> mty
+      | Mtt_strengthen (t,p,a) ->
+          begin match constrain t with
+          | MtyL_alias _ as mty -> mty
+          | _ when a -> MtyL_alias p
+          | mty -> strengthen_lazy ~aliasable:a env mty p
+          end
+      | Mtt_dot (t,s) ->
         let pick s = function
           | (SigL_module(id, _, md, _, _)) when Ident.name id = s -> Some md.mdl_type
           | _ -> None
         in
         let project_item s = List.find_map (pick s) in
-        let rec project s = function
+        let rec project = function
           | MtyL_alias p -> MtyL_alias (Path.Pdot (p,s))
           | MtyL_ident (p,nom) when Nominal.is_empty nom ->
               MtyL_ident (Path.Pdot (p,s), nom)
           | MtyL_ident (p,nom) ->
               begin match expand_lazy_nominal env p nom with
-              | Some mty -> project s mty
+              | Some mty -> project mty
               | None -> assert false
               end
           | MtyL_functor _ -> assert false
@@ -202,14 +214,16 @@ and constrain_sig_item constr env item =
               | Some mty -> mty
               | None -> assert false
               end
-        in
-        let rec apply arg = function
+          in
+          project (constrain t)
+        | Mtt_apply (t,arg) ->
+          let rec apply = function
           | MtyL_alias p -> MtyL_alias (Path.Papply (p,arg))
           | MtyL_ident (p,nom) when Nominal.is_empty nom ->
               MtyL_ident (Path.Papply(p,arg), nom)
           | MtyL_ident (p,nom) ->
               begin match expand_lazy_nominal env p nom with
-              | Some mty -> apply arg mty
+              | Some mty -> apply mty
               | None -> assert false
               end
           | MtyL_functor (param, mty_res) ->
@@ -226,26 +240,12 @@ and constrain_sig_item constr env item =
               | Unit -> assert false (* RL : FIXME *)
               end
           | MtyL_signature _ -> assert false
-        in
-        let rec compute = function
-          | Nmty_strengthened (p,mty) ->
-              let md = { md with mdl_type = mty } in
-              let str =
-                  strengthen_lazy_decl ~aliasable:false env md p in
-              str
-          | Nmty_dot (p,s) ->
-              let md = compute p in
-              let mty = project s md.mdl_type
-              in
-              { md with mdl_type = mty }
-          | Nmty_apply (p,q) ->
-              let md = compute p in
-              let mty = apply q md.mdl_type
-              in
-              { md with mdl_type = mty }
-        in
-        compute p
+          in
+          apply (constrain t)
     in
+    let str = {md with mdl_type = constrain t}
+    in
+      (* RL FIXME: s/md/str/ *)
       let env =
         Env.add_module_declaration_lazy ~update_summary:false id pres md env in
       if rl_debugging then (

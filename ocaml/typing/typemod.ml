@@ -761,15 +761,18 @@ let merge_constraint initial_env loc sg lid constr =
                 Printtyp.modtype wm.md.md_type
             );
             assert (not wm.remove_aliases);
-            let tp = match rl_with, x with
+            let mty = match rl_with, x with
               | Rl_with_none, _ -> None
               | Rl_with_unstrengthened, (_, _, _, Some (mty,_)) ->
-                  Some (Nominal.Nmty_strengthened (wm.path, mty))
+                  Some mty
               | Rl_with_unstrengthened, _ -> None
               | Rl_with_strengthened, _ ->
-                  Some (Nominal.Nmty_strengthened (wm.path,wm.md.md_type))
+                  Some wm.md.md_type
             in
-            Option.map (fun tp -> (namelist, Nominal.Withc_module (Nominal.Withmod_path tp))) tp
+            Option.map (fun mty ->
+              let t = Nominal.Mtt_strengthen (Nominal.Mtt_exactly mty, wm.path, false)
+              in
+              (namelist, Nominal.Withc_module t)) mty
         | _, _ -> None
         in
         x, nom, sg
@@ -1989,23 +1992,25 @@ let rec nongen_modtype env f = function
           doesn't contain non-gen tyvars even if the individual components do.
           Do we need to return a module_type option here which expands as much
           as necessary to get rid of non-gen tyvars? *)
-      let rec nongen_tpath = function
-      | Nominal.Nmty_strengthened (_,mty) ->
+      let rec nongen_transform =
+        let open Nominal in
+        function
+        | Mtt_lookup -> false
+        | Mtt_exactly mty -> nongen_modtype env f mty
           (* RL FIXME: Is this correct? What if the constraint doesn't
              change the underlying type? *)
-          nongen_modtype env f mty
-      | Nominal.Nmty_dot (tp,_) ->
+        | Mtt_strengthen (t,_,_) -> nongen_transform t
+        | Mtt_dot (t,_) ->
           (* RL FIXME: What if tp does constan a non-gen tyvar but the
              projection doesn't? *)
-          nongen_tpath tp
-      | Nominal.Nmty_apply (tp,_) ->
-          (* RL FIXME: What if tp does constan a non-gen tyvar but the
-             application doesn't? *)
-          nongen_tpath tp
+            nongen_transform t
+        | Mtt_apply (t,_) ->
+            (* RL FIXME: What if tp does constan a non-gen tyvar but the
+               application doesn't? *)
+            nongen_transform t
       in
       let nongen_constraint = function
-      | _, Nominal.Withc_module (Nominal.Withmod_path tp) -> nongen_tpath tp
-      | _, Nominal.Withc_module (Nominal.Withmod_strengthen _) -> false
+      | _, Nominal.Withc_module t -> nongen_transform t
       | _, Nominal.Withc_type _ -> false
       in
       List.exists nongen_constraint (Nominal.constraints nom)
@@ -3060,14 +3065,16 @@ let type_structure = type_structure false None
 
 let rec normalize_modtype = function
   | Mty_ident (_,nom) ->
-      let rec normalize_tpath = function
-      | Nominal.Nmty_strengthened (_,mty) -> normalize_modtype mty
-      | Nominal.Nmty_dot (tp,_) -> normalize_tpath tp
-      | Nominal.Nmty_apply (tp,_) -> normalize_tpath tp
+      let open Nominal in
+      let rec normalize_transform = function
+      | Mtt_lookup -> ()
+      | Mtt_exactly mty -> normalize_modtype mty
+      | Mtt_strengthen (t,_,_) -> normalize_transform t
+      | Mtt_dot (t,_) -> normalize_transform t
+      | Mtt_apply (t,_) -> normalize_transform t
       in
       let normalize_module_constraint = function
-      | _, Nominal.Withc_module (Nominal.Withmod_path tp) -> normalize_tpath tp
-      | _, Nominal.Withc_module (Nominal.Withmod_strengthen _) -> ()
+      | _, Nominal.Withc_module t -> normalize_transform t
       | _, Nominal.Withc_type _ -> ()
       in
       List.iter normalize_module_constraint (Nominal.constraints nom)

@@ -611,17 +611,15 @@ type 'a nmty =
 *)
 
 module Nominal : sig
-  type 'a typed_path =
-    | Nmty_strengthened of Path.t * 'a (* 'a strengthend to Path.t *)
-    | Nmty_dot of 'a typed_path * string
-    | Nmty_apply of 'a typed_path * Path.t
-
-  type 'a with_module =
-    | Withmod_path of 'a typed_path
-    | Withmod_strengthen of Path.t * bool
+  type 'a modtype_transform =
+    | Mtt_lookup
+    | Mtt_exactly of 'a
+    | Mtt_strengthen of 'a modtype_transform * Path.t * bool
+    | Mtt_dot of 'a modtype_transform * string
+    | Mtt_apply of 'a modtype_transform *  Path.t
 
   type 'a with_constraint =
-    | Withc_module of 'a with_module
+    | Withc_module of 'a modtype_transform
     | Withc_type of Path.t
 
   type 'a module_with = string list * 'a with_constraint
@@ -637,8 +635,6 @@ module Nominal : sig
   val append : 'a nominal -> 'a nominal -> 'a nominal
 
   val make : 'a module_with list -> 'a nominal
-
-  val untyped_path : 'a typed_path -> Path.t
 end
 
 type module_type =

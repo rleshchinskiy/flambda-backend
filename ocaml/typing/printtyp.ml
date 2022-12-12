@@ -1935,19 +1935,23 @@ let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
 
-and tree_of_typed_path ?(ellipsis=false) = function
-  | Types.Nominal.Nmty_strengthened (p,mty) ->
-      Otp_strengthened (tree_of_path Module p, tree_of_modtype ~ellipsis mty)
-  | Types.Nominal.Nmty_dot (p,s) -> Otp_dot (tree_of_typed_path ~ellipsis p, s)
-  | Types.Nominal.Nmty_apply (p,q) ->
-      Otp_apply (tree_of_typed_path ~ellipsis p, tree_of_path Module q)
+and tree_of_modtype_transform ?(ellipsis=false) =
+  let open Types.Nominal in
+  function
+  | Mtt_lookup -> Omtt_lookup
+  | Mtt_exactly t -> Omtt_exactly (tree_of_modtype ~ellipsis t)
+  | Mtt_strengthen (t,p,a) ->
+      Omtt_strengthen (tree_of_modtype_transform ~ellipsis t, tree_of_path Module p, a)
+  | Mtt_dot (t,s) ->
+      Omtt_dot (tree_of_modtype_transform ~ellipsis t, s)
+  | Mtt_apply (t,p) ->
+      Omtt_apply (tree_of_modtype_transform ~ellipsis t, tree_of_path Module p)
 
 and tree_of_module_with ?(ellipsis=false) = function
-  | ns, Types.Nominal.Withc_module (Types.Nominal.Withmod_path p) ->
-      Omc_module (ns, tree_of_typed_path ~ellipsis p)
-  | ns, Types.Nominal.Withc_module (Types.Nominal.Withmod_strengthen (p,a)) ->
-      Omc_strengthen (ns, tree_of_path Module p, a)
-  | ns, Types.Nominal.Withc_type p -> Omc_type (ns, tree_of_path Type p)
+  | ns, Types.Nominal.Withc_module t ->
+      ns, Owithc_module (tree_of_modtype_transform ~ellipsis t)
+  | ns, Types.Nominal.Withc_type p ->
+      ns, Owithc_type (tree_of_path Type p)
 
 and tree_of_functor_parameter = function
   | Unit ->

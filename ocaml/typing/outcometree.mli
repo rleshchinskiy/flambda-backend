@@ -123,14 +123,16 @@ type out_module_type =
   | Omty_ident of out_ident * out_module_with list * out_module_type option
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
-and out_typed_path =
-  | Otp_strengthened of out_ident * out_module_type
-  | Otp_dot of out_typed_path * string
-  | Otp_apply of out_typed_path * out_ident
-and out_module_with =
-  | Omc_module of string list * out_typed_path
-  | Omc_strengthen of string list * out_ident * bool
-  | Omc_type of string list * out_ident
+and out_modtype_transform =
+  | Omtt_lookup
+  | Omtt_exactly of out_module_type
+  | Omtt_strengthen of out_modtype_transform * out_ident * bool
+  | Omtt_dot of out_modtype_transform * string
+  | Omtt_apply of out_modtype_transform * out_ident
+and out_with_constraint =
+  | Owithc_module of out_modtype_transform
+  | Owithc_type of out_ident
+and out_module_with = string list * out_with_constraint
 and out_sig_item =
   | Osig_class of
       bool * string * out_type_param list * out_class_type *

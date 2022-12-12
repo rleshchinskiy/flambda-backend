@@ -378,13 +378,29 @@ let type_iterators =
     | Named (_, mt) -> it.it_module_type it mt
   and it_module_type it = function
       Mty_ident (p, nom) ->
+        let open Nominal in
+        let rec it_transform = function
+          | Mtt_lookup -> None
+          | Mtt_exactly mty ->
+              it.it_module_type it mty;
+              None
+          | Mtt_strengthen (Mtt_exactly mty, p, _) ->
+              it.it_module_type it mty;
+              it.it_path p;
+              Some p
+          | Mtt_strengthen (t, p, _) ->
+              it.it_path p;
+              it_transform t
+          | Mtt_dot (t,s) ->
+              Option.map (fun p -> Path.Pdot (p,s)) (it_transform t)
+          | Mtt_apply (t,p) ->
+              Option.map (fun q -> Path.Papply (q,p)) (it_transform t)
+        in
         it.it_path p;
         List.iter
           (function
-            | _, Nominal.Withc_module (Nominal.Withmod_path p) ->
-              it.it_path (Nominal.untyped_path p)
-            | _, Nominal.Withc_module (Nominal.Withmod_strengthen (p,_)) ->
-              it.it_path p
+            | _, Nominal.Withc_module t ->
+              it_transform t |> Option.iter it.it_path
             | _, Nominal.Withc_type p -> it.it_path p
           )
           (Nominal.constraints nom)

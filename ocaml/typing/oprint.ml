@@ -641,33 +641,39 @@ and print_simple_out_module_type ppf =
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple
-and print_out_typed_path ppf =
-  function
-  | Otp_strengthened (id,mty) ->
-      fprintf ppf "(%a/%a)"
-        print_ident id
-        print_out_module_type mty
-  | Otp_dot (p,s) ->
+and print_out_modtype_transform ppf =
+  let atomic f =
+    pp_print_char ppf '(';
+    f ();
+    pp_print_char ppf ')'
+  in
+  let rec print parens ppf = function
+  | Omtt_lookup -> pp_print_char ppf '*'
+  | Omtt_exactly mty -> print_out_module_type ppf mty
+  | Omtt_strengthen (t,p,a) ->
+      parens (fun () -> fprintf ppf "%a%s%a"
+        (print atomic) t
+        (if a then "%" else "/")
+        print_ident p)
+  | Omtt_dot (t,s) ->
       fprintf ppf "%a.%s"
-        print_out_typed_path p
+        (print atomic) t
         s
-  | Otp_apply (p,q) ->
-      fprintf ppf "%a(%a)"
-      print_out_typed_path p
-        print_ident q
+  | Omtt_apply (t,p) ->
+      parens (fun () -> fprintf ppf "%a(%a)"
+        (print atomic) t
+        print_ident p
+      )
+  in
+  print (fun f -> f ()) ppf
 and print_out_module_with ppf =
   let dotted ns = String.concat "." ns in
   function
-  | Omc_module (ns,p) ->
+  | ns, Owithc_module t ->
       fprintf ppf "module %s = %a"
         (dotted ns)
-        print_out_typed_path p
-  | Omc_strengthen (ns,p,a) ->
-      fprintf ppf "module %s %s %a"
-        (dotted ns)
-        (if a then "@=" else "*=")
-        print_ident p
-  | Omc_type (ns,p) ->
+        print_out_modtype_transform t
+  | ns, Owithc_type p ->
       fprintf ppf "type %s = %a"
         (dotted ns)
         print_ident p

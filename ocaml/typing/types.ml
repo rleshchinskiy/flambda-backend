@@ -334,27 +334,20 @@ type aliasability =
   | NotAliasable
 
 module Nominal = struct
-  type 'a typed_path =
-    | Nmty_strengthened of Path.t * 'a (* 'a strengthend to Path.t *)
-    | Nmty_dot of 'a typed_path * string
-    | Nmty_apply of 'a typed_path * Path.t
-
-  type 'a with_module =
-    | Withmod_path of 'a typed_path
-    | Withmod_strengthen of Path.t * bool
+  type 'a modtype_transform =
+    | Mtt_lookup
+    | Mtt_exactly of 'a
+    | Mtt_strengthen of 'a modtype_transform * Path.t * bool
+    | Mtt_dot of 'a modtype_transform * string
+    | Mtt_apply of 'a modtype_transform *  Path.t
 
   type 'a with_constraint =
-    | Withc_module of 'a with_module
+    | Withc_module of 'a modtype_transform
     | Withc_type of Path.t
 
   type 'a module_with = string list * 'a with_constraint
 
   type 'a nominal = 'a module_with list
-
-  let rec untyped_path = function
-  | Nmty_strengthened (p,_) -> p
-  | Nmty_dot (p,s) -> Path.Pdot (untyped_path p, s)
-  | Nmty_apply (p,q) -> Path.Papply (untyped_path p, q)
 
   let empty = []
   let is_empty = function
@@ -364,17 +357,15 @@ module Nominal = struct
   let constraints cs = cs
 
   let map f = 
-    let rec map_typed_path f = function
-    | Nmty_strengthened (p,t) -> Nmty_strengthened (p,f t)
-    | Nmty_dot (p,s) -> Nmty_dot (map_typed_path f p,s)
-    | Nmty_apply (p,q) -> Nmty_apply (map_typed_path f p, q)
-    in
-    let map_with_module = function
-      | Withmod_path p -> Withmod_path (map_typed_path f p)
-      | Withmod_strengthen _ as x -> x
+    let rec map_transform = function
+      | Mtt_lookup -> Mtt_lookup
+      | Mtt_exactly mty -> Mtt_exactly (f mty)
+      | Mtt_strengthen (t,p,a) -> Mtt_strengthen (map_transform t,p,a)
+      | Mtt_dot (t,s) -> Mtt_dot (map_transform t,s)
+      | Mtt_apply (t,p) -> Mtt_apply (map_transform t,p)
     in
     let map_with = function
-      | Withc_module wm -> Withc_module (map_with_module wm)
+      | Withc_module t -> Withc_module (map_transform t)
       | Withc_type _ as x -> x
     in
     List.map (fun (ns,constr) -> (ns, map_with constr))
