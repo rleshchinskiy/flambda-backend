@@ -399,9 +399,9 @@ let type_iterators =
         it.it_path p;
         List.iter
           (function
-            | _, Nominal.Withc_module t ->
+            | _, Nominal.Modc_module t ->
               it_transform t |> Option.iter it.it_path
-            | _, Nominal.Withc_type p -> it.it_path p
+            | _, Nominal.Modc_type p -> it.it_path p
           )
           (Nominal.constraints nom)
       (*

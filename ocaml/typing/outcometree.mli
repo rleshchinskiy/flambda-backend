@@ -129,10 +129,10 @@ and out_modtype_transform =
   | Omtt_strengthen of out_modtype_transform * out_ident * bool
   | Omtt_dot of out_modtype_transform * string
   | Omtt_apply of out_modtype_transform * out_ident
-and out_with_constraint =
-  | Owithc_module of out_modtype_transform
-  | Owithc_type of out_ident
-and out_module_with = string list * out_with_constraint
+and out_module_constraint =
+  | Omodc_module of out_modtype_transform
+  | Omodc_type of out_ident
+and out_module_with = string list * out_module_constraint
 and out_sig_item =
   | Osig_class of
       bool * string * out_type_param list * out_class_type *

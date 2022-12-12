@@ -669,11 +669,11 @@ and print_out_modtype_transform ppf =
 and print_out_module_with ppf =
   let dotted ns = String.concat "." ns in
   function
-  | ns, Owithc_module t ->
+  | ns, Omodc_module t ->
       fprintf ppf "module %s = %a"
         (dotted ns)
         print_out_modtype_transform t
-  | ns, Owithc_type p ->
+  | ns, Omodc_type p ->
       fprintf ppf "type %s = %a"
         (dotted ns)
         print_ident p

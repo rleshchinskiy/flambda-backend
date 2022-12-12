@@ -1948,10 +1948,10 @@ and tree_of_modtype_transform ?(ellipsis=false) =
       Omtt_apply (tree_of_modtype_transform ~ellipsis t, tree_of_path Module p)
 
 and tree_of_module_with ?(ellipsis=false) = function
-  | ns, Types.Nominal.Withc_module t ->
-      ns, Owithc_module (tree_of_modtype_transform ~ellipsis t)
-  | ns, Types.Nominal.Withc_type p ->
-      ns, Owithc_type (tree_of_path Type p)
+  | ns, Types.Nominal.Modc_module t ->
+      ns, Omodc_module (tree_of_modtype_transform ~ellipsis t)
+  | ns, Types.Nominal.Modc_type p ->
+      ns, Omodc_type (tree_of_path Type p)
 
 and tree_of_functor_parameter = function
   | Unit ->

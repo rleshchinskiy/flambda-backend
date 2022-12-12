@@ -341,11 +341,11 @@ module Nominal = struct
     | Mtt_dot of 'a modtype_transform * string
     | Mtt_apply of 'a modtype_transform *  Path.t
 
-  type 'a with_constraint =
-    | Withc_module of 'a modtype_transform
-    | Withc_type of Path.t
+  type 'a module_constraint =
+    | Modc_module of 'a modtype_transform
+    | Modc_type of Path.t
 
-  type 'a module_with = string list * 'a with_constraint
+  type 'a module_with = string list * 'a module_constraint
 
   type 'a nominal = 'a module_with list
 
@@ -365,8 +365,8 @@ module Nominal = struct
       | Mtt_apply (t,p) -> Mtt_apply (map_transform t,p)
     in
     let map_with = function
-      | Withc_module t -> Withc_module (map_transform t)
-      | Withc_type _ as x -> x
+      | Modc_module t -> Modc_module (map_transform t)
+      | Modc_type _ as x -> x
     in
     List.map (fun (ns,constr) -> (ns, map_with constr))
   

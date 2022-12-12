@@ -772,7 +772,7 @@ let merge_constraint initial_env loc sg lid constr =
             Option.map (fun mty ->
               let t = Nominal.Mtt_strengthen (Nominal.Mtt_exactly mty, wm.path, false)
               in
-              (namelist, Nominal.Withc_module t)) mty
+              (namelist, Nominal.Modc_module t)) mty
         | _, _ -> None
         in
         x, nom, sg
@@ -2010,8 +2010,8 @@ let rec nongen_modtype env f = function
             nongen_transform t
       in
       let nongen_constraint = function
-      | _, Nominal.Withc_module t -> nongen_transform t
-      | _, Nominal.Withc_type _ -> false
+      | _, Nominal.Modc_module t -> nongen_transform t
+      | _, Nominal.Modc_type _ -> false
       in
       List.exists nongen_constraint (Nominal.constraints nom)
   | Mty_alias _ -> false
@@ -3074,8 +3074,8 @@ let rec normalize_modtype = function
       | Mtt_apply (t,_) -> normalize_transform t
       in
       let normalize_module_constraint = function
-      | _, Nominal.Withc_module t -> normalize_transform t
-      | _, Nominal.Withc_type _ -> ()
+      | _, Nominal.Modc_module t -> normalize_transform t
+      | _, Nominal.Modc_type _ -> ()
       in
       List.iter normalize_module_constraint (Nominal.constraints nom)
   | Mty_alias _ -> ()

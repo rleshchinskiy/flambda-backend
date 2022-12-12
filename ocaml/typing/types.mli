@@ -618,11 +618,11 @@ module Nominal : sig
     | Mtt_dot of 'a modtype_transform * string
     | Mtt_apply of 'a modtype_transform *  Path.t
 
-  type 'a with_constraint =
-    | Withc_module of 'a modtype_transform
-    | Withc_type of Path.t
+  type 'a module_constraint =
+    | Modc_module of 'a modtype_transform
+    | Modc_type of Path.t
 
-  type 'a module_with = string list * 'a with_constraint
+  type 'a module_with = string list * 'a module_constraint
 
   type 'a nominal
 

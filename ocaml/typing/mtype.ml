@@ -94,7 +94,7 @@ and strengthen_lazy_sig' ~aliasable env sg p =
                   else
                     { decl with type_manifest = manif }
               in
-              (decl, add_with ([Ident.name id], Nominal.Withc_type name) withs )
+              (decl, add_with ([Ident.name id], Nominal.Modc_type name) withs )
         in
         ((env, newwiths), Some (SigL_type(id, newdecl, rs, vis)))
     | SigL_typext _ as sigelt ->
@@ -106,7 +106,7 @@ and strengthen_lazy_sig' ~aliasable env sg p =
         in
         let env =
           Env.add_module_declaration_lazy ~update_summary:false id pres md env in
-        let constr = Nominal.Withc_module (Mtt_strengthen (Mtt_lookup, name, aliasable)) in
+        let constr = Nominal.Modc_module (Mtt_strengthen (Mtt_lookup, name, aliasable)) in
         let bind = ([Ident.name id], constr) in
         ((env, add_with bind withs), Some (SigL_module(id, pres, str, rs, vis)))
         (* Need to add the module in case it defines manifest module types *)
@@ -174,7 +174,7 @@ and constrain_signature env constr sg =
 and constrain_sig_item constr env item =
   let open Subst.Lazy in
   match constr, item with
-  | ([s], Nominal.Withc_module t), SigL_module(id, pres, md, rs, vis)
+  | ([s], Nominal.Modc_module t), SigL_module(id, pres, md, rs, vis)
     when Ident.name id = s ->
     let open Nominal in
     (*
@@ -255,7 +255,7 @@ and constrain_sig_item constr env item =
       );
       env, SigL_module (id, pres, str, rs, vis)
 
-  | ([s], Nominal.Withc_type p), SigL_type(id, decl, rs, vis) when Ident.name id = s ->
+  | ([s], Nominal.Modc_type p), SigL_type(id, decl, rs, vis) when Ident.name id = s ->
       let decl =
         match decl.type_manifest, decl.type_private, decl.type_kind with
           Some _, Public, _ -> decl

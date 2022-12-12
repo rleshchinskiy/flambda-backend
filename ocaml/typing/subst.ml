@@ -587,9 +587,9 @@ and subst_lazy_nominal scoping s =
     | Mtt_apply (t,p) -> Mtt_apply (transform t, module_path s p)
   in
   let module_with = function
-    | Withc_module t ->
-        Withc_module (transform t)
-    | Withc_type p -> Withc_type (type_path s p)
+    | Modc_module t ->
+        Modc_module (transform t)
+    | Modc_type p -> Modc_type (type_path s p)
   in
   map_nominal (fun (ns,def) -> (ns, module_with def))
 
