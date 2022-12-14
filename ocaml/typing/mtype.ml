@@ -53,21 +53,8 @@ let rec scrape_lazy env mty =
       end
   | MtyL_with (base, ns, mc) ->
       begin match apply_constraint ns mc env base with
-        | Some exp ->
-            (* scrape_lazy env exp *)
-            exp
-        | None ->
-            mty
-      end
-  | _ -> mty
-
-and scrape_with_lazy_once env mty =
-  let open Subst.Lazy in
-  match mty with
-    MtyL_with (base, ns, mc) ->
-      begin match apply_constraint ns mc env base with
-        | Some exp -> scrape_with_lazy_once env exp
-        | None -> mty
+        | MtyL_with _ as mty -> mty
+        | mty -> scrape_lazy env mty
       end
   | _ -> mty
 
@@ -78,10 +65,7 @@ and strengthen_lazy ~aliasable env mty p =
       let withs, sg = strengthen_lazy_sig ~aliasable env sg p in
       begin match mty, withs with
       | (MtyL_ident _| MtyL_with _), Some cs when rl_with ->
-          if rl_debugging then (
-            Format.printf "wrapping %a@."
-              Printtyp.modtype (Subst.Lazy.force_modtype mty)
-          );
+          (* RL TODO: could simplify here *)
           List.fold_left
             (fun mty (ns,mc) -> MtyL_with (mty, ns, mc))
             mty
@@ -184,6 +168,8 @@ and strengthen_lazy_decl ~aliasable env md p =
   );
   md'
 
+(* Applies a with constraint, trying to produce a type which has no with
+   outside (but can be an ident of an alias). *)
 and apply_constraint ns mc env mty =
   let open Subst.Lazy in
   let rescope mty = 
@@ -194,8 +180,7 @@ and apply_constraint ns mc env mty =
   | MtyL_ident p ->
       begin match Env.find_modtype_expansion_lazy p env with
       | mty -> apply_constraint ns mc env (rescope mty)
-      | exception Not_found ->
-        None
+      | exception Not_found -> MtyL_with (mty,ns,mc)
       end
   | MtyL_signature sg ->
       let sg = Subst.Lazy.force_signature_once sg
@@ -203,18 +188,20 @@ and apply_constraint ns mc env mty =
         |> snd
         |> Subst.Lazy.of_signature_items
       in
-      Some (MtyL_signature sg)
+      MtyL_signature sg
   | MtyL_functor _ ->
       (* RL FIXME *)
       assert false
-  | MtyL_alias p ->
+  | MtyL_alias p -> MtyL_alias p
+      (*
       let p = Env.normalize_module_path (Some Location.none) env p in
       let mty = (Env.find_module_lazy p env).mdl_type in
       apply_constraint ns mc env mty (* (rescope mty) *) (* RL FIXME: was not doing this before a bug *)
+      *)
   | MtyL_with (mty, ns', mc') ->
       begin match apply_constraint ns' mc' env mty with
-      | Some mty -> apply_constraint ns mc env mty
-      | None -> None
+      | MtyL_with _ as mty -> MtyL_with (mty,ns,mc)
+      | mty -> apply_constraint ns mc env mty
       end
 
 and apply_constraint_to_sig_item ns mc env item =
@@ -239,15 +226,14 @@ and apply_constraint_to_sig_item ns mc env item =
         in
         let project_item s = List.find_map (pick s) in
         let rec project = function
+          (* FIXME: prefix *)
           | MtyL_alias p -> MtyL_alias (Path.Pdot (p,s))
-          | MtyL_ident p -> MtyL_ident (Path.Pdot (p,s))
-          (*
-          | MtyL_ident (p,nom) ->
-              begin match expand_lazy_nominal env p nom with
-              | Some mty -> project mty
-              | None -> assert false
+          (* | MtyL_ident p -> MtyL_ident (Path.Pdot (p,s)) (* FIXME: is this right? *) *)
+          | MtyL_ident p ->
+              begin match Env.find_modtype_expansion_lazy p env with
+                | mty -> project mty (* RL FIXME: freshen? *)
+                | exception Not_found -> assert false
               end
-          *)
           | MtyL_functor _ -> assert false
           | MtyL_signature sg ->
               let items = Subst.Lazy.force_signature_once sg in
@@ -257,16 +243,23 @@ and apply_constraint_to_sig_item ns mc env item =
               end
           | MtyL_with (mty,ns,mc) ->
               begin match apply_constraint ns mc env mty with
-                | Some mty -> project mty
-                | None -> assert false
+                | MtyL_with _ -> assert false
+                | mty -> project mty
               end
           in
           project (constrain t)
         | Mtt_apply (t,arg) ->
           let rec apply = function
           | MtyL_alias p -> MtyL_alias (Path.Papply (p,arg))
+          (*
           | MtyL_ident p -> MtyL_ident (Path.Papply(p,arg))
-          | MtyL_functor (param, mty_res) ->
+          *)
+          | MtyL_ident p ->
+            begin match Env.find_modtype_expansion_lazy p env with
+              | mty -> apply mty (* RL FIXME: freshen? *)
+              | exception Not_found -> assert false
+            end
+        | MtyL_functor (param, mty_res) ->
               begin match param with
               | Named (id, mty_param) ->
                 let scope = Ctype.create_scope () in
@@ -282,8 +275,8 @@ and apply_constraint_to_sig_item ns mc env item =
           | MtyL_signature _ -> assert false
           | MtyL_with (mty,ns,mc) ->
             begin match apply_constraint ns mc env mty with
-            | Some mty -> apply mty
-            | None -> assert false
+            | MtyL_with _ -> assert false
+            | mty -> apply mty
         end
         in
         apply (constrain t)
@@ -655,24 +648,16 @@ let scrape env mty =
       Subst.Lazy.force_modtype (scrape_lazy env (Subst.Lazy.of_modtype mty))
   | _ -> mty
 
-let scrape_with_lazy env mty =
-  match mty with
-    Subst.Lazy.MtyL_with _ ->
-      scrape_lazy env mty
-  | _ ->
-      mty
+let scrape_with_lazy env = function
+  | Subst.Lazy.MtyL_with (mty,ns,mc) -> apply_constraint ns mc env mty
+  | mty -> mty
 
 let scrape_with env mty =
   match mty with
-    Mty_with _ -> scrape env mty
+    Mty_with _ ->
+      Subst.Lazy.force_modtype (scrape_with_lazy env (Subst.Lazy.of_modtype mty))
   | _ -> mty
   
-let scrape_with_once env mty =
-  match mty with
-    Mty_with _ ->
-      Subst.Lazy.force_modtype (scrape_with_lazy_once env (Subst.Lazy.of_modtype mty))
-  | _ -> mty
-    
 let () =
   Env.strengthen := strengthen_lazy ;
   Env.scrape_with_lazy := scrape_with_lazy ;

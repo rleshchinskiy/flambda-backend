@@ -613,10 +613,15 @@ type 'a nmty =
 module Nominal : sig
   type 'a modtype_transform =
     | Mtt_lookup
+        (* look up the type of the thing whose type is being transformed *)
     | Mtt_exactly of 'a
+        (* use this exact type *)
     | Mtt_strengthen of 'a modtype_transform * Path.t * bool
+        (* strengthen the type produced by the transform (bool is aliasable) *)
     | Mtt_dot of 'a modtype_transform * string
+        (* project from the type produced by the transform *)
     | Mtt_apply of 'a modtype_transform *  Path.t
+        (* apply the type produced by the transform to a path *)
 
   type 'a module_constraint =
     | Modc_module of 'a modtype_transform

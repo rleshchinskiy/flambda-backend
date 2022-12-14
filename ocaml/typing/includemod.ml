@@ -596,7 +596,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
     end
     *)
   | (Mty_with _, _) ->
-      begin match Mtype.scrape_with_once env mty1 with
+      begin match Mtype.scrape_with env mty1 with
         Mty_with _ -> Error (Error.Mt_core Abstract_module_type)
       | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
       end
@@ -605,7 +605,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
             |> Subst.Lazy.modtype Subst.Keep subst
             |> Subst.Lazy.force_modtype
       in
-      begin match Mtype.scrape_with_once env mty2 with
+      begin match Mtype.scrape_with env mty2 with
         Mty_with _ -> Error (Error.Mt_core Abstract_module_type)
       | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
       end

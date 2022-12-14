@@ -22,7 +22,6 @@ val scrape: Env.t -> module_type -> module_type
            till hitting a "hard" module type (signature, functor,
            or abstract module type ident. *)
 val scrape_with: Env.t -> module_type -> module_type
-val scrape_with_once: Env.t -> module_type -> module_type
 val scrape_for_functor_arg: Env.t -> module_type -> module_type
         (* Remove aliases in a functor argument type *)
 val scrape_for_type_of:
