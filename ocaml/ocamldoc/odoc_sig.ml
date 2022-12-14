@@ -1524,7 +1524,7 @@ module Analyser =
         Parsetree.Pmty_ident longident ->
           let name =
             match sig_module_type with
-              Types.Mty_ident (path,_) -> Name.from_path path
+              Types.Mty_ident path -> Name.from_path path
             | _ -> Name.from_longident longident.txt
               (* FIXME this happens for module type F : functor ... -> Toto, Toto is not an ident but a structure *)
           in

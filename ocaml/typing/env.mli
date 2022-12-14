@@ -486,11 +486,19 @@ val strengthen:
     (aliasable:bool -> t -> Subst.Lazy.modtype ->
      Path.t -> Subst.Lazy.modtype) ref
 (* Forward declaration to break mutual recursion with Mtype. *)
+(*
 val expand_lazy_nominal:
     (t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option) ref
+*)
+val scrape_with_lazy:
+    (t -> Subst.Lazy.modtype -> Subst.Lazy.modtype) ref
 (* Forward declaration to break mutual recursion with Mtype. *)
+(*
 val expand_nominal:
     (t -> Path.t -> nominal -> module_type option) ref
+*)
+val scrape_with:
+    (t -> module_type -> module_type) ref
 (* Forward declaration to break mutual recursion with Ctype. *)
 val same_constr: (t -> type_expr -> type_expr -> bool) ref
 (* Forward declaration to break mutual recursion with Printtyp. *)

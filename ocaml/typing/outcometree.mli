@@ -120,9 +120,10 @@ type out_with_kind =
 type out_module_type =
   | Omty_abstract
   | Omty_functor of (string option * out_module_type) option * out_module_type
-  | Omty_ident of out_ident * out_module_with list * out_module_type option
+  | Omty_ident of out_ident
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
+  | Omty_with of out_module_type * out_module_with list * out_module_type option
 and out_modtype_transform =
   | Omtt_lookup
   | Omtt_exactly of out_module_type

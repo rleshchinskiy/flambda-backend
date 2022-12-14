@@ -1835,7 +1835,7 @@ module Analyser =
           (* let name = Odoc_env.full_module_type_name env (Name.from_path (fst pkg_type)) in *)
           let name =
             match tt_modtype with
-            | Mty_ident (p,_) ->
+            | Mty_ident p ->
                 Odoc_env.full_module_type_name env (Name.from_path p)
             | _ -> ""
           in

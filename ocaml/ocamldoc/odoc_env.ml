@@ -206,11 +206,13 @@ let subst_module_type env t =
   let rec iter t =
     let open Types in
     match t with
-      Mty_ident (p,nom) ->
+      Mty_ident p ->
         let new_p =
           Odoc_name.to_path (full_module_type_name env (Odoc_name.from_path p))
         in
-        Mty_ident (new_p,nom)
+        Mty_ident new_p
+    | Mty_with (mt,ns,mc) ->
+        Mty_with (iter mt, ns, Nominal.map_module_constraint iter mc)
     | Mty_alias _
     | Mty_signature _ ->
         t

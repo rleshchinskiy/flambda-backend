@@ -102,10 +102,8 @@ let rec module_path s path =
 
 let modtype_path s path =
       match Path.Map.find path s.modtypes with
-      | Mty_ident (p, nom) when Nominal.is_empty nom -> p
-      | Mty_ident _ ->
-        fatal_error "Subst.modtype_path(Mty_ident)"
-     | Mty_alias _ | Mty_signature _ | Mty_functor _ ->
+      | Mty_ident p -> p
+     | Mty_alias _ | Mty_signature _ | Mty_functor _ | Mty_with _ ->
          fatal_error "Subst.modtype_path"
       | exception Not_found ->
          match path with
@@ -460,14 +458,13 @@ module Lazy_types = struct
     }
 
   and modtype =
-    | MtyL_ident of Path.t * nominal
+    | MtyL_ident of Path.t
     | MtyL_signature of signature
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
+    | MtyL_with of modtype * string list * module_constraint
 
-  and nominal = modtype Types.Nominal.nominal
-
-  and module_with = modtype Types.Nominal.module_with
+  and module_constraint = modtype Nominal.module_constraint
 
   and modtype_declaration =
     {
@@ -527,7 +524,7 @@ let rename_bound_idents scoping s sg =
     | SigL_modtype(id, mtd, vis) :: rest ->
         let id' = rename id in
         rename_bound_idents
-          (add_modtype id (Mty_ident(Pident id', Nominal.empty)) s)
+          (add_modtype id (Mty_ident(Pident id')) s)
           (SigL_modtype(id', mtd, vis) :: sg)
           rest
     | SigL_class(id, cd, rs, vis) :: rest ->
@@ -573,11 +570,11 @@ and force_module_decl md =
     md_attributes = md.mdl_attributes;
     md_loc = md.mdl_loc;
     md_uid = md.mdl_uid }
-and lazy_nominal nom = Nominal.map lazy_modtype nom
+and lazy_module_constraint c = Nominal.map_module_constraint lazy_modtype c
 
-and force_nominal nom = Nominal.map force_modtype nom
+and force_module_constraint c = Nominal.map_module_constraint force_modtype c
 
-and subst_lazy_nominal scoping s =
+and subst_lazy_module_constraint scoping s =
   let open Types.Nominal in
   let rec transform = function
     | Mtt_lookup -> Mtt_lookup
@@ -586,39 +583,30 @@ and subst_lazy_nominal scoping s =
     | Mtt_dot (t,s) -> Mtt_dot (transform t, s)
     | Mtt_apply (t,p) -> Mtt_apply (transform t, module_path s p)
   in
-  let module_with = function
+  function
     | Modc_module t ->
         Modc_module (transform t)
     | Modc_type p -> Modc_type (type_path s p)
-  in
-  map_nominal (fun (ns,def) -> (ns, module_with def))
 
 and lazy_modtype = function
-  | Mty_ident (p, nom) -> MtyL_ident (p, lazy_nominal nom)
+  | Mty_ident p -> MtyL_ident p
   | Mty_signature sg ->
      MtyL_signature (Lazy_backtrack.create_forced (S_eager sg))
   | Mty_functor (Unit, mty) -> MtyL_functor (Unit, lazy_modtype mty)
   | Mty_functor (Named (id, arg), res) ->
      MtyL_functor (Named (id, lazy_modtype arg), lazy_modtype res)
   | Mty_alias p -> MtyL_alias p
+  | Mty_with (mty, ns, mc) -> MtyL_with (lazy_modtype mty, ns, lazy_module_constraint mc)
 
 and subst_lazy_modtype scoping s = function
-  | MtyL_ident (p, nom) ->
-      let nom = subst_lazy_nominal scoping s nom in
+  | MtyL_ident p ->
       begin match Path.Map.find p s.modtypes with
-       | mty ->
-          begin match mty, Nominal.constraints nom with
-          | Mty_ident (q, qnom), _ ->
-              MtyL_ident (q, Nominal.append (lazy_nominal qnom) nom)
-          | mty, [] -> lazy_modtype mty
-          | _ -> assert false
-              (* RL FIXME *)
-          end
+       | mty -> lazy_modtype mty
        | exception Not_found ->
           begin match p with
-          | Pident _ -> MtyL_ident (p, nom)
+          | Pident _ -> MtyL_ident p
           | Pdot(p, n) ->
-             MtyL_ident(Pdot(module_path s p, n), nom)
+             MtyL_ident(Pdot(module_path s p, n))
           | Papply _ ->
              fatal_error "Subst.modtype"
           end
@@ -636,9 +624,11 @@ and subst_lazy_modtype scoping s = function
                   subst_lazy_modtype scoping (add_module id (Pident id') s) res)
   | MtyL_alias p ->
       MtyL_alias (module_path s p)
+  | MtyL_with (mty, ns, mc) ->
+      MtyL_with (subst_lazy_modtype scoping s mty, ns, subst_lazy_module_constraint scoping s mc)
 
 and force_modtype = function
-  | MtyL_ident (p, nom) -> Mty_ident (p, force_nominal nom)
+  | MtyL_ident p -> Mty_ident p
   | MtyL_signature sg -> Mty_signature (force_signature sg)
   | MtyL_functor (param, res) ->
      let param : Types.functor_parameter =
@@ -647,6 +637,7 @@ and force_modtype = function
        | Named (id, mty) -> Named (id, force_modtype mty) in
      Mty_functor (param, force_modtype res)
   | MtyL_alias p -> Mty_alias p
+  | MtyL_with (mty, ns, mc) -> Mty_with (force_modtype mty, ns, force_module_constraint mc)
 
 and lazy_modtype_decl mtd =
   let mtdl_type = Option.map lazy_modtype mtd.mtd_type in
@@ -777,14 +768,12 @@ module Lazy = struct
   let of_signature sg = Lazy_backtrack.create_forced (S_eager sg)
   let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy sg)
   let of_signature_item = lazy_signature_item
-  let of_nominal = lazy_nominal
 
   let module_decl = subst_lazy_module_decl
   let modtype = subst_lazy_modtype
   let modtype_decl = subst_lazy_modtype_decl
   let signature = subst_lazy_signature
   let signature_item = subst_lazy_signature_item
-  let nominal = subst_lazy_nominal
 
   let force_module_decl = force_module_decl
   let force_modtype = force_modtype
@@ -792,7 +781,6 @@ module Lazy = struct
   let force_signature = force_signature
   let force_signature_once = force_signature_once
   let force_signature_item = force_signature_item
-  let force_nominal = force_nominal
 end
 
 let signature sc s sg =

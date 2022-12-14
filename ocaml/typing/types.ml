@@ -345,47 +345,26 @@ module Nominal = struct
     | Modc_module of 'a modtype_transform
     | Modc_type of Path.t
 
-  type 'a module_with = string list * 'a module_constraint
+  let rec map_transform f = function
+    | Mtt_lookup -> Mtt_lookup
+    | Mtt_exactly mty -> Mtt_exactly (f mty)
+    | Mtt_strengthen (t,p,a) -> Mtt_strengthen (map_transform f t, p, a)
+    | Mtt_dot (t,s) -> Mtt_dot (map_transform f t, s)
+    | Mtt_apply (t,p) -> Mtt_apply (map_transform f t, p)
 
-  type 'a nominal = 'a module_with list
-
-  let empty = []
-  let is_empty = function
-    | [] -> true
-    | _ -> false
-
-  let constraints cs = cs
-
-  let map f = 
-    let rec map_transform = function
-      | Mtt_lookup -> Mtt_lookup
-      | Mtt_exactly mty -> Mtt_exactly (f mty)
-      | Mtt_strengthen (t,p,a) -> Mtt_strengthen (map_transform t,p,a)
-      | Mtt_dot (t,s) -> Mtt_dot (map_transform t,s)
-      | Mtt_apply (t,p) -> Mtt_apply (map_transform t,p)
-    in
-    let map_with = function
-      | Modc_module t -> Modc_module (map_transform t)
-      | Modc_type _ as x -> x
-    in
-    List.map (fun (ns,constr) -> (ns, map_with constr))
-  
-  let map_nominal f = List.map f
-
-  let add cs ds = ds @ cs
-
-  let append cs ds = cs @ ds
-
-  let make cs = cs
+  let map_module_constraint f = function
+    | Modc_module t -> Modc_module (map_transform f t)
+    | Modc_type _ as x -> x
 end
 
 type module_type =
-    Mty_ident of Path.t * nominal
+    Mty_ident of Path.t
   | Mty_signature of signature
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
+  | Mty_with of module_type * string list * module_constraint
 
-and nominal = module_type Nominal.nominal
+and module_constraint = module_type Nominal.module_constraint
 
 and functor_parameter =
   | Unit
@@ -432,8 +411,6 @@ and ext_status =
     Text_first                     (* first constructor of an extension *)
   | Text_next                      (* not first constructor of an extension *)
   | Text_exception                 (* an exception *)
-
-type module_with = module_type Nominal.module_with  
 
 (* Constructor and record label descriptions inserted held in typing
    environments *)

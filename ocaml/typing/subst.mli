@@ -99,14 +99,13 @@ module Lazy : sig
     }
 
   and modtype =
-    | MtyL_ident of Path.t * nominal
+    | MtyL_ident of Path.t
     | MtyL_signature of signature
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
+    | MtyL_with of modtype * string list * module_constraint
 
-  and nominal = modtype Types.Nominal.nominal
-
-  and module_with = modtype Types.Nominal.module_with
+  and module_constraint = modtype Nominal.module_constraint
 
   and modtype_declaration =
     {
@@ -139,14 +138,12 @@ module Lazy : sig
   val of_signature : Types.signature -> signature
   val of_signature_items : signature_item list -> signature
   val of_signature_item : Types.signature_item -> signature_item
-  val of_nominal : Types.nominal -> nominal
 
   val module_decl : scoping -> t -> module_decl -> module_decl
   val modtype : scoping -> t -> modtype -> modtype
   val modtype_decl : scoping -> t -> modtype_declaration -> modtype_declaration
   val signature : scoping -> t -> signature -> signature
   val signature_item : scoping -> t -> signature_item -> signature_item
-  val nominal : scoping -> t -> nominal -> nominal
 
   val force_module_decl : module_decl -> Types.module_declaration
   val force_modtype : modtype -> Types.module_type
@@ -154,5 +151,4 @@ module Lazy : sig
   val force_signature : signature -> Types.signature
   val force_signature_once : signature -> signature_item list
   val force_signature_item : signature_item -> Types.signature_item
-  val force_nominal : nominal -> Types.nominal
 end

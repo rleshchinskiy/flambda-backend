@@ -1900,29 +1900,7 @@ let add_sigitem env x =
   Env.add_signature (Signature_group.flatten x) env
 
 let rec tree_of_modtype ?(ellipsis=false) = function
-  | Mty_ident (p, nom) ->
-    let mty = match rl_print_with with
-      | Rlpw_with_only -> None
-      | Rlpw_expand_only | Rlpw_both -> 
-          begin match Types.Nominal.constraints nom with
-            | [] -> None
-            | _ ->
-              let env = !printing_env
-              in
-              !Env.expand_nominal env p nom
-          end
-    in
-    let t = Option.map (tree_of_modtype ~ellipsis) mty
-    in
-    begin match t, rl_print_with with
-    | Some t, Rlpw_expand_only -> t
-    | _, _ ->
-      let path = tree_of_path Module_type p
-      in
-      let cs = List.map (tree_of_module_with ~ellipsis) (Types.Nominal.constraints nom)
-      in
-      Omty_ident (path, cs, t)
-    end
+  | Mty_ident p -> Omty_ident (tree_of_path Module_type p)
   | Mty_signature sg ->
       Omty_signature (if ellipsis then [Osig_ellipsis]
                       else tree_of_signature sg)
@@ -1934,6 +1912,28 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       Omty_functor (param, res)
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
+  | Mty_with (_,_,_) as mty ->
+      let rec collect cs = function
+        | Mty_with (mty,ns,mc) ->
+            collect ((ns,mc) :: cs) mty
+        | mty -> mty, cs
+      in
+      let expanded = match rl_print_with with
+        | Rlpw_with_only -> None
+        | Rlpw_expand_only | Rlpw_both ->
+          begin match !Env.scrape_with !printing_env mty with
+            Mty_with _ -> None
+          | mty -> Some (tree_of_modtype ~ellipsis mty)
+          end
+      in
+      begin match expanded, rl_print_with with
+      | Some t, Rlpw_expand_only -> t
+      | _, _ ->
+        let base, cs = collect [] mty
+        in
+        let cs = List.map (tree_of_module_with ~ellipsis) cs in
+        Omty_with (tree_of_modtype ~ellipsis base, cs, expanded)
+      end
 
 and tree_of_modtype_transform ?(ellipsis=false) =
   let open Types.Nominal in
@@ -2069,13 +2069,6 @@ let print_signature ppf tree =
 
 let signature ppf sg =
   fprintf ppf "%a" print_signature (tree_of_signature sg)
-
-let module_with ppf c =
-  !Oprint.out_module_with ppf (tree_of_module_with c)
-
-let nominal_type ppf (p,nom) =
-  !Oprint.out_module_type ppf
-    (Omty_ident (tree_of_path Module p, List.map tree_of_module_with (Nominal.constraints nom), None))
 
 (* Print a signature body (used by -i when compiling a .ml) *)
 let printed_signature sourcefile ppf sg =

@@ -377,10 +377,8 @@ let rec trim_signature = function
                  Sig_modtype (id, Modtype_manifest (trim_modtype mty))*)
              | item -> item)
            sg)
-  | Mty_ident (p,nom) ->
-      (* RL FIXME: Is this right? Do we need to expand? *)
-      Mty_ident (p, nom)
   | mty -> mty
+    (* RL FIXME: Is this right? Do we need to expand Mty_with? *)
 
 let show_prim to_sig ppf lid =
   let env = !toplevel_env in
@@ -572,7 +570,7 @@ let () =
                (if secretly_the_same_path env path new_path
                 then acc
                 else def Trec_not :: acc)
-         | Mty_ident _ | Mty_signature _ | Mty_functor _ ->
+         | Mty_ident _ | Mty_signature _ | Mty_functor _ | Mty_with _ ->
              List.rev (def (is_rec_module id md) :: acc)
        in
        accum_aliases path md []

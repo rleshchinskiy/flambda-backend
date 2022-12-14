@@ -140,17 +140,15 @@ module Illegal_permutation = struct
 
   (* Find module type at position [path] and convert the [coerce_pos] path to
      a [pos] path *)
-  let rec find env ctx path (mt:Types.module_type) = match mt, path with
-    | Mty_ident (p,nom), _ ->
-      begin match Mtype.expand_nominal env p nom with
-      | None -> raise Not_found
-      | Some mt -> find env ctx path mt
-      end
-    | Mty_alias p, _ ->
+  let rec find env ctx path (mt:Types.module_type) =
+    match Env.scrape_alias env mt, path with
+    (*
+    | (Mty_ident p | Mty_alias p), _ ->
         begin match (Env.find_modtype p env).mtd_type with
         | None -> raise Not_found
         | Some mt -> find env ctx path mt
         end
+    *)
     | Mty_signature s , [] -> List.rev ctx, s
     | Mty_signature s, Item k :: q ->
         begin match runtime_item k s with
@@ -298,6 +296,7 @@ module With_shorthand = struct
     | Types.Mty_ident _
     | Types.Mty_alias _
     | Types.Mty_signature []
+    | Types.Mty_with _
       -> Original r.item
     | Types.Mty_signature _ | Types.Mty_functor _
       -> Synthetic r

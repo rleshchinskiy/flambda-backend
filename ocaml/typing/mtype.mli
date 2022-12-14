@@ -21,6 +21,8 @@ val scrape: Env.t -> module_type -> module_type
         (* Expand toplevel module type abbreviations
            till hitting a "hard" module type (signature, functor,
            or abstract module type ident. *)
+val scrape_with: Env.t -> module_type -> module_type
+val scrape_with_once: Env.t -> module_type -> module_type
 val scrape_for_functor_arg: Env.t -> module_type -> module_type
         (* Remove aliases in a functor argument type *)
 val scrape_for_type_of:
@@ -35,7 +37,9 @@ val strengthen: aliasable:bool -> Env.t -> module_type -> Path.t -> module_type
 val strengthen_decl:
   aliasable:bool -> Env.t -> module_declaration -> Path.t -> module_declaration
 
+(*
 val expand_nominal : Env.t -> Path.t -> nominal -> module_type option
+*)
 
 val sig_make_manifest : signature -> signature
         (* Make abstract types manifest.  Similar to strengthening, but rather

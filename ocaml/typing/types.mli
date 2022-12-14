@@ -622,28 +622,17 @@ module Nominal : sig
     | Modc_module of 'a modtype_transform
     | Modc_type of Path.t
 
-  type 'a module_with = string list * 'a module_constraint
-
-  type 'a nominal
-
-  val empty : 'a nominal
-  val is_empty : 'a nominal -> bool
-  val constraints : 'a nominal -> 'a module_with list
-  val map : ('a -> 'b) -> 'a nominal -> 'b nominal
-  val map_nominal : ('a module_with -> 'a module_with) -> 'a nominal -> 'a nominal
-  val add : 'a nominal -> 'a module_with list -> 'a nominal
-  val append : 'a nominal -> 'a nominal -> 'a nominal
-
-  val make : 'a module_with list -> 'a nominal
+  val map_module_constraint : ('a -> 'b) -> 'a module_constraint -> 'b module_constraint
 end
 
 type module_type =
-    Mty_ident of Path.t * nominal
+    Mty_ident of Path.t
   | Mty_signature of signature
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
+  | Mty_with of module_type * string list * module_constraint
 
-and nominal = module_type Nominal.nominal
+and module_constraint = module_type Nominal.module_constraint
 
 and functor_parameter =
   | Unit
@@ -690,8 +679,6 @@ and ext_status =
     Text_first                     (* first constructor in an extension *)
   | Text_next                      (* not first constructor in an extension *)
   | Text_exception
-
-type module_with = module_type Nominal.module_with
 
 val item_visibility : signature_item -> visibility
 

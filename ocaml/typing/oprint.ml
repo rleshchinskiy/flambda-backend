@@ -615,23 +615,7 @@ and print_out_functor ppf t =
 and print_simple_out_module_type ppf =
   function
     Omty_abstract -> ()
-  | Omty_ident (id, cs, mty) ->
-      let rec print_constrs sep ppf = function
-        | [] -> ()
-        | c :: cs -> 
-          fprintf ppf "@ %s %a%a"
-            sep
-            print_out_module_with c
-            (print_constrs "and") cs
-      in
-      begin match mty, cs with
-      | None, [] -> fprintf ppf "%a" print_ident id
-      | _, _ ->
-        fprintf ppf "@[<hv 2>%a%a%a@;<1 -2>@]"
-        print_ident id
-        (print_constrs "with") cs
-        (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty
-    end;
+  | Omty_ident id -> print_ident ppf id
   | Omty_signature sg ->
      begin match sg with
        | [] -> fprintf ppf "sig end"
@@ -641,6 +625,19 @@ and print_simple_out_module_type ppf =
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple
+  | Omty_with (mty, cs, mty_alt) ->
+    let rec print_constrs sep ppf = function
+    | [] -> ()
+    | c :: cs -> 
+      fprintf ppf "@ %s %a%a"
+        sep
+        print_out_module_with c
+        (print_constrs "and") cs
+  in
+    fprintf ppf "@[<hv 2>%a%a%a@;<1 -2>@]"
+      print_simple_out_module_type mty
+      (print_constrs "with") cs
+      (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt
 and print_out_modtype_transform ppf =
   let atomic f =
     pp_print_char ppf '(';
@@ -653,7 +650,7 @@ and print_out_modtype_transform ppf =
   | Omtt_strengthen (t,p,a) ->
       parens (fun () -> fprintf ppf "%a%s%a"
         (print atomic) t
-        (if a then "%" else "/")
+        (if a then "/=" else "/")
         print_ident p)
   | Omtt_dot (t,s) ->
       fprintf ppf "%a.%s"

@@ -377,7 +377,13 @@ let type_iterators =
     | Unit -> ()
     | Named (_, mt) -> it.it_module_type it mt
   and it_module_type it = function
-      Mty_ident (p, nom) ->
+      Mty_ident p -> it.it_path p
+    | Mty_alias p -> it.it_path p
+    | Mty_signature sg -> it.it_signature it sg
+    | Mty_functor (p, mt) ->
+        it.it_functor_param it p;
+        it.it_module_type it mt
+    | Mty_with (mty, _, constr) ->
         let open Nominal in
         let rec it_transform = function
           | Mtt_lookup -> None
@@ -396,22 +402,12 @@ let type_iterators =
           | Mtt_apply (t,p) ->
               Option.map (fun q -> Path.Papply (q,p)) (it_transform t)
         in
-        it.it_path p;
-        List.iter
-          (function
-            | _, Nominal.Modc_module t ->
+        it.it_module_type it mty;
+        match constr with
+          | Nominal.Modc_module t ->
               it_transform t |> Option.iter it.it_path
-            | _, Nominal.Modc_type p -> it.it_path p
-          )
-          (Nominal.constraints nom)
-      (*
-          ;
-        Option.iter (it.it_signature it) (Nominal.signature nom) *)
-    | Mty_alias p -> it.it_path p
-    | Mty_signature sg -> it.it_signature it sg
-    | Mty_functor (p, mt) ->
-        it.it_functor_param it p;
-        it.it_module_type it mt
+          | Nominal.Modc_type p -> it.it_path p
+  
   and it_class_type it = function
       Cty_constr (p, tyl, cty) ->
         it.it_path p;

@@ -737,8 +737,8 @@ let merge_constraint initial_env loc sg lid constr =
               (* A module alias cannot be refined, so keep it
                  and just check that the constraint is correct *)
               item
-          | Mty_ident (p,nom), _, Some c ->
-              let newmd = {md with md_type = Mty_ident (p, Nominal.add nom [c])} in
+          | (Mty_ident _ | Mty_with _) as mty, _, Some (ns,mc) ->
+              let newmd = {md with md_type = Mty_with (mty,ns,mc)} in
               Sig_module(id, Mp_present, newmd, rs, priv)
           | _ ->
               let newmd = {md with md_type = Mty_signature newsg} in
@@ -885,7 +885,7 @@ let rec approx_modtype env smty =
       let path =
         Env.lookup_modtype_path ~use:false ~loc:smty.pmty_loc lid.txt env
       in
-      Mty_ident (path, Nominal.empty)
+      Mty_ident path
   | Pmty_alias lid ->
       let path =
         Env.lookup_module_path ~use:false ~load:false
@@ -1418,7 +1418,7 @@ and transl_modtype_aux env smty =
   match smty.pmty_desc with
     Pmty_ident lid ->
       let path = transl_modtype_longident loc env lid.txt in
-      mkmty (Tmty_ident (path, lid)) (Mty_ident (path, Nominal.empty)) env loc
+      mkmty (Tmty_ident (path, lid)) (Mty_ident path) env loc
         smty.pmty_attributes
   | Pmty_alias lid ->
       let path = transl_module_alias loc env lid.txt in
@@ -1471,10 +1471,9 @@ and transl_modtype_aux env smty =
         ([],init_withs,init_sg) constraints in
       let scope = Ctype.create_scope () in
       let mty = match body.mty_type, rev_withs with
-        | Mty_ident (p,nom), Some rev_withs ->
-            let nom = Nominal.add nom (List.rev rev_withs)
-            in
-            Mty_ident (p, nom)
+        | (Mty_ident _ | Mty_with _) as mty, Some rev_withs  ->
+            List.fold_right (fun (ns,mc) mty -> Mty_with (mty,ns,mc))
+              rev_withs mty
         | _ -> Mty_signature final_sg
       in
       mkmty (Tmty_with ( body, List.rev rev_tcstrs))
@@ -1987,33 +1986,7 @@ let path_of_module mexp =
    do not contain non-generalized type variable *)
 
 let rec nongen_modtype env f = function
-    Mty_ident (_,nom) ->
-      (* RL FIXME: It's possible that the expansion of a type with constraints
-          doesn't contain non-gen tyvars even if the individual components do.
-          Do we need to return a module_type option here which expands as much
-          as necessary to get rid of non-gen tyvars? *)
-      let rec nongen_transform =
-        let open Nominal in
-        function
-        | Mtt_lookup -> false
-        | Mtt_exactly mty -> nongen_modtype env f mty
-          (* RL FIXME: Is this correct? What if the constraint doesn't
-             change the underlying type? *)
-        | Mtt_strengthen (t,_,_) -> nongen_transform t
-        | Mtt_dot (t,_) ->
-          (* RL FIXME: What if tp does constan a non-gen tyvar but the
-             projection doesn't? *)
-            nongen_transform t
-        | Mtt_apply (t,_) ->
-            (* RL FIXME: What if tp does constan a non-gen tyvar but the
-               application doesn't? *)
-            nongen_transform t
-      in
-      let nongen_constraint = function
-      | _, Nominal.Modc_module t -> nongen_transform t
-      | _, Nominal.Modc_type _ -> false
-      in
-      List.exists nongen_constraint (Nominal.constraints nom)
+    Mty_ident _ -> false
   | Mty_alias _ -> false
   | Mty_signature sg ->
       let env = Env.add_signature sg env in
@@ -2027,7 +2000,34 @@ let rec nongen_modtype env f = function
             Env.add_module ~arg:true id Mp_present param env
       in
       nongen_modtype env f body
-
+  | Mty_with (mty,_,mc) ->
+      (* RL FIXME: It's possible that the expansion of a type with constraints
+          doesn't contain non-gen tyvars even if the individual components do.
+          Do we need to return a module_type option here which expands as much
+          as necessary to get rid of non-gen tyvars? *)
+      let rec nongen_transform =
+        let open Nominal in
+        function
+        | Mtt_lookup -> false
+        | Mtt_exactly mty -> nongen_modtype env f mty
+          (* RL FIXME: Is this correct? What if the constraint doesn't
+              change the underlying type? *)
+        | Mtt_strengthen (t,_,_) -> nongen_transform t
+        | Mtt_dot (t,_) ->
+          (* RL FIXME: What if tp does constan a non-gen tyvar but the
+              projection doesn't? *)
+            nongen_transform t
+        | Mtt_apply (t,_) ->
+            (* RL FIXME: What if tp does constan a non-gen tyvar but the
+                application doesn't? *)
+            nongen_transform t
+      in
+      let nongen_constraint = function
+      | Nominal.Modc_module t -> nongen_transform t
+      | Nominal.Modc_type _ -> false
+      in
+      nongen_modtype env f mty || nongen_constraint mc
+  
 and nongen_signature_item env f = function
     Sig_value(_id, desc, _) -> f env desc.val_type
   | Sig_module(_id, _, md, _, _) -> nongen_modtype env f md.md_type
@@ -2223,15 +2223,20 @@ and package_constraints env loc mty constrs =
     match Mtype.scrape env mty with
     | Mty_signature sg ->
         Mty_signature (package_constraints_sig env loc sg constrs)
-    | Mty_functor _ | Mty_alias _ -> assert false
-    | Mty_ident (p,_) -> raise(Error(loc, env, Cannot_scrape_package_type p))
+    | mty ->
+        let rec report = function
+          Mty_ident p -> raise(Error(loc, env, Cannot_scrape_package_type p))
+        | Mty_with (mty,_,_) -> report mty
+        | Mty_functor _ | Mty_alias _ | Mty_signature _ -> assert false
+        in
+        report mty
   end
 
 let modtype_of_package env loc p fl =
   (* We call Ctype.correct_levels to ensure that the types being added to the
      module type are at generic_level. *)
   let mty =
-    package_constraints env loc (Mty_ident (p, Nominal.empty))
+    package_constraints env loc (Mty_ident p)
       (List.map (fun (n, t) -> Longident.flatten n, Ctype.correct_levels t) fl)
   in
   Subst.modtype Keep Subst.identity mty
@@ -3064,7 +3069,11 @@ let type_structure = type_structure false None
 (* Normalize types in a signature *)
 
 let rec normalize_modtype = function
-  | Mty_ident (_,nom) ->
+    Mty_ident _
+  | Mty_alias _ -> ()
+  | Mty_signature sg -> normalize_signature sg
+  | Mty_functor(_param, body) -> normalize_modtype body
+  | Mty_with (mty,_,mc) ->
       let open Nominal in
       let rec normalize_transform = function
       | Mtt_lookup -> ()
@@ -3074,13 +3083,11 @@ let rec normalize_modtype = function
       | Mtt_apply (t,_) -> normalize_transform t
       in
       let normalize_module_constraint = function
-      | _, Nominal.Modc_module t -> normalize_transform t
-      | _, Nominal.Modc_type _ -> ()
+      | Nominal.Modc_module t -> normalize_transform t
+      | Nominal.Modc_type _ -> ()
       in
-      List.iter normalize_module_constraint (Nominal.constraints nom)
-  | Mty_alias _ -> ()
-  | Mty_signature sg -> normalize_signature sg
-  | Mty_functor(_param, body) -> normalize_modtype body
+      normalize_modtype mty ;
+      normalize_module_constraint mc
 
 and normalize_signature sg = List.iter normalize_signature_item sg
 
@@ -3201,7 +3208,7 @@ let type_package env m p fl =
   (* go back to original level *)
   Ctype.end_def ();
   let mty =
-    if fl = [] then (Mty_ident (p, Nominal.empty))
+    if fl = [] then (Mty_ident p)
     else modtype_of_package env modl.mod_loc p fl'
   in
   List.iter

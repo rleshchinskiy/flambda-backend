@@ -805,6 +805,7 @@ let strengthen =
          aliasable:bool -> t -> Subst.Lazy.modtype ->
          Path.t -> Subst.Lazy.modtype)
 
+(*
 let expand_lazy_nominal =
   (* to be filled with Mtype.expand_lazy_modtype_with *)
   ref ((fun _env _p _nom -> assert false) :
@@ -814,7 +815,17 @@ let expand_nominal =
   (* to be filled with Mtype.expand_lazy_modtype_with *)
   ref ((fun _env _p _nom -> assert false) :
         t -> Path.t -> nominal -> module_type option)
-        
+*)      
+
+let scrape_with_lazy =
+  (* to be filled with Mtype.expand_lazy_modtype_with *)
+  ref ((fun _env _mty -> assert false) :
+        t -> Subst.Lazy.modtype -> Subst.Lazy.modtype)
+
+let scrape_with =
+  (* to be filled with Mtype.expand_lazy_modtype_with *)
+  ref ((fun _env _mty -> assert false) :
+        t -> module_type -> module_type)
         
 let md md_type =
   {md_type; md_attributes=[]; md_loc=Location.none
@@ -1460,7 +1471,7 @@ let rec normalize_modtype_path env path =
 
 and expand_modtype_path env path =
   match (find_modtype_lazy path env).mtdl_type with
-  | Some (MtyL_ident (path, nom)) when Nominal.is_empty nom -> normalize_modtype_path env path
+  | Some (MtyL_ident path) -> normalize_modtype_path env path
   | _ | exception Not_found -> path
 
 let find_module path env =
@@ -1668,11 +1679,12 @@ let find_shadowed_types path env =
 
 let rec scrape_alias env ?path mty =
   let open Subst.Lazy in
-  match mty, path with
-    MtyL_ident (p, nom), _ ->
-      begin match !expand_lazy_nominal env p nom with
-      | Some mty -> scrape_alias env mty ?path
-      | None -> mty
+  match !scrape_with_lazy env mty, path with
+    MtyL_ident p, _ ->
+      begin try
+        scrape_alias env (find_modtype_expansion_lazy p env) ?path
+      with Not_found ->
+        mty
       end
   | MtyL_alias path, _ ->
       begin try
@@ -1683,8 +1695,10 @@ let rec scrape_alias env ?path mty =
         mty
       end
   | mty, Some path ->
-      !strengthen ~aliasable:true env mty path
-  | _ -> mty
+      let mty = !strengthen ~aliasable:true env mty path in
+      !scrape_with_lazy env mty
+  | mty, None ->
+      mty
 
 
 (* Given a signature and a root path, prefix all idents in the signature
@@ -1722,7 +1736,7 @@ let prefix_idents root prefixing_sub sg =
       let p = Pdot(root, Ident.name id) in
       prefix_idents root
         ((SigL_modtype(id, mtd, vis), p) :: items_and_paths)
-        (Subst.add_modtype id (Mty_ident (p, Types.Nominal.empty)) prefixing_sub)
+        (Subst.add_modtype id (Mty_ident p) prefixing_sub)
         rem
     | SigL_class(id, cd, rs, vis) :: rem ->
       (* pretend this is a type, cf. PR#6650 *)
@@ -1787,7 +1801,7 @@ let rec components_of_module_maker
            cm_path; cm_addr; cm_mty; cm_shape} : _ result =
   match scrape_alias cm_env cm_mty with
   | MtyL_signature sg ->
-      let c =
+        let c =
         { comp_values = NameMap.empty;
           comp_constrs = NameMap.empty;
           comp_labels = NameMap.empty; comp_types = NameMap.empty;
@@ -1965,6 +1979,7 @@ let rec components_of_module_maker
           fcomp_cache = Hashtbl.create 17;
           fcomp_subst_cache = Hashtbl.create 17 })
   | MtyL_ident _ -> Error No_components_abstract
+  | MtyL_with _ -> Error No_components_abstract
   | MtyL_alias p -> Error (No_components_alias p)
 
 (* Insertion of bindings by identifier + path *)
@@ -2623,7 +2638,7 @@ let read_signature modname filename =
   let md = Subst.Lazy.force_module_decl mda.mda_declaration in
   match md.md_type with
   | Mty_signature sg -> sg
-  | Mty_ident _ | Mty_functor _ | Mty_alias _ -> assert false
+  | Mty_ident _ | Mty_functor _ | Mty_alias _ | Mty_with _ -> assert false
 
 let is_identchar_latin1 = function
   | 'A'..'Z' | 'a'..'z' | '_' | '\192'..'\214' | '\216'..'\246'

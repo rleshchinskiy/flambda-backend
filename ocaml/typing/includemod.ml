@@ -373,7 +373,7 @@ let pair_components subst sig1_comps sig2 =
           | Sig_module _ ->
               Subst.add_module id2 (Path.Pident id1) subst
           | Sig_modtype _ ->
-              Subst.add_modtype id2 (Mty_ident (Path.Pident id1, Nominal.empty)) subst
+              Subst.add_modtype id2 (Mty_ident (Path.Pident id1)) subst
           | Sig_value _ | Sig_typext _
           | Sig_class _ | Sig_class_type _ ->
               subst
@@ -394,8 +394,8 @@ let pair_components subst sig1_comps sig2 =
 let retrieve_functor_params env mty =
   let rec retrieve_functor_params before env =
     function
-    | Mty_ident (p, nom) as res ->
-        begin match Mtype.expand_nominal env p nom with
+    | Mty_ident p as res ->
+        begin match expand_modtype_path env p with
         | Some mty -> retrieve_functor_params before env mty
         | None -> List.rev before, res
         end
@@ -406,6 +406,11 @@ let retrieve_functor_params env mty =
         end
     | Mty_functor (p, res) -> retrieve_functor_params (p :: before) env res
     | Mty_signature _ as res -> List.rev before, res
+    | Mty_with _ as res ->
+        begin match Mtype.scrape_with env res with
+          Mty_with _ -> List.rev before, res
+        | mty -> retrieve_functor_params before env mty
+        end
   in
   retrieve_functor_params [] env mty
 
@@ -478,6 +483,12 @@ let rec modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape =
     Error Error.(diff mty1 mty2 reason)
 
 and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
+  if rl_debugging then (
+    Format.printf "@[<hv 2>try_modtypes@ %a@ %a@ (%a)@]@."
+      Printtyp.modtype mty1
+      Printtyp.modtype mty2
+      Printtyp.modtype (Subst.modtype Subst.Keep subst mty2)
+  );
   match mty1, mty2 with
   | (Mty_alias p1, Mty_alias p2) ->
       if Env.is_functor_arg p2 env then
@@ -486,16 +497,29 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
           Error Error.(Mt_core Incompatible_aliases)
       else Ok (Tcoerce_none, orig_shape)
   | (Mty_alias p1, _) -> begin
+      if rl_debugging then (
+        Format.printf "normalizing alias %a@." Printtyp.path p1
+      );
       match
         Env.normalize_module_path (Some Location.none) env p1
       with
       | exception Env.Error (Env.Missing_module (_, _, path)) ->
           Error Error.(Mt_core(Unbound_module_path path))
       | p1 ->
-          begin match expand_module_alias ~strengthen:false env p1 with
-          | Error e -> Error (Error.Mt_core e)
+          if rl_debugging then (
+            Format.printf "expanding alias %a@." Printtyp.path p1
+          );
+            begin match expand_module_alias ~strengthen:false env p1 with
+          | Error e ->
+                if rl_debugging then (
+                  Format.printf "expand_module_alias failed %a@." Printtyp.path p1
+                );
+                Error (Error.Mt_core e)
           | Ok mty1 ->
-              match strengthened_modtypes ~in_eq ~loc ~aliasable:true env ~mark
+                if rl_debugging then (
+                  Format.printf "calling strengthened_modtypes %a@." Printtyp.path p1
+                );
+                match strengthened_modtypes ~in_eq ~loc ~aliasable:true env ~mark
                       subst mty1 p1 mty2 orig_shape
               with
               | Ok _ as x -> x
@@ -516,7 +540,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       | None -> assert false
       end
   *)
-  | (Mty_ident (p1,nom1), Mty_ident (p2,nom2)) when Nominal.is_empty nom1 && Nominal.is_empty nom2 ->
+  | (Mty_ident p1, Mty_ident p2) ->
       let p1 = Env.normalize_modtype_path env p1 in
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       if Path.same p1 p2 then Ok (Tcoerce_none, orig_shape)
@@ -526,24 +550,30 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
             try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
         | None, _  | _, None -> Error (Error.Mt_core Abstract_module_type)
         end
-  | (Mty_ident (p1,nom), _) ->
-      let p1 = Env.normalize_modtype_path env p1 in
+  | (Mty_ident p1, _) ->
       if rl_debugging then (
-        Format.printf "@[<hv 2>expandL %a@]@."
-          Printtyp.modtype (Mty_ident (p1,nom))
+        Format.printf "expanding ident %a@." Printtyp.path p1
       );
-      begin match Mtype.expand_nominal env p1 nom with
-      | Some mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-      | None -> Error (Error.Mt_core Abstract_module_type)
-      end
-      (*
+      let p1 = Env.normalize_modtype_path env p1 in
       begin match expand_modtype_path env p1 with
       | Some p1 ->
           try_modtypes ~in_eq ~loc env ~mark subst p1 mty2 orig_shape
       | None -> Error (Error.Mt_core Abstract_module_type)
       end
-      *)
-  | (_, Mty_ident (p2,nom)) ->
+  | (_, Mty_ident p2) ->
+      let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
+        begin match expand_modtype_path env p2 with
+        | Some p2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 p2 orig_shape
+        | None ->
+            begin match mty1 with
+            | Mty_functor _ ->
+                let params1 = retrieve_functor_params env mty1 in
+                let d = Error.sdiff params1 ([],mty2) in
+                Error Error.(Functor (Params d))
+            | _ -> Error Error.(Mt_core Not_an_identifier)
+            end
+        end
+    (*
     let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
     let nom = Subst.Lazy.of_nominal nom
       |> Subst.Lazy.nominal Subst.Keep subst
@@ -564,20 +594,21 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
         | _ -> Error Error.(Mt_core Not_an_identifier)
         end
     end
-    (*
-    let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
-      begin match expand_modtype_path env p2 with
-      | Some p2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 p2 orig_shape
-      | None ->
-          begin match mty1 with
-          | Mty_functor _ ->
-              let params1 = retrieve_functor_params env mty1 in
-              let d = Error.sdiff params1 ([],mty2) in
-              Error Error.(Functor (Params d))
-          | _ -> Error Error.(Mt_core Not_an_identifier)
-          end
-      end
     *)
+  | (Mty_with _, _) ->
+      begin match Mtype.scrape_with_once env mty1 with
+        Mty_with _ -> Error (Error.Mt_core Abstract_module_type)
+      | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+      end
+  | (_, Mty_with _) ->
+      let mty2 = Subst.Lazy.of_modtype mty2
+            |> Subst.Lazy.modtype Subst.Keep subst
+            |> Subst.Lazy.force_modtype
+      in
+      begin match Mtype.scrape_with_once env mty2 with
+        Mty_with _ -> Error (Error.Mt_core Abstract_module_type)
+      | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+      end
   | (Mty_signature sig1, Mty_signature sig2) ->
       begin match
         signatures ~in_eq ~loc env ~mark subst sig1 sig2 orig_shape
@@ -686,20 +717,21 @@ and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
       Printtyp.modtype mty2
   );
   match mty1, mty2 with
-  | Mty_ident (p1,nom1), Mty_ident (p2,nom2)
-      when equal_modtype_paths env p1 subst p2
-        && Nominal.is_empty nom1 && Nominal.is_empty nom2 ->
+  | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
       Ok (Tcoerce_none, shape)
   | _, _ ->
-      let mty1 = Mtype.strengthen ~aliasable env mty1 path1 in
-      modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape
+      let mty1' = Mtype.strengthen ~aliasable env mty1 path1 in
+      if rl_debugging then (
+        Format.printf "@[<hv 2>STRENGTHENED@ %a@ %a@]@."
+          Printtyp.modtype mty1
+          Printtyp.modtype mty1'
+      ) ;
+      modtypes ~in_eq ~loc env ~mark subst mty1' mty2 shape
 
 and strengthened_module_decl ~loc ~aliasable env ~mark
     subst md1 path1 md2 shape =
   match md1.md_type, md2.md_type with
-  | Mty_ident (p1,nom1), Mty_ident (p2,nom2)
-      when equal_modtype_paths env p1 subst p2
-        && Nominal.is_empty nom1 && Nominal.is_empty nom2 ->
+  | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
       Ok (Tcoerce_none, shape)
   | _, _ ->
       let md1 = Mtype.strengthen_decl ~aliasable env md1 path1 in
@@ -908,7 +940,7 @@ and modtype_infos ~in_eq ~loc env ~mark subst id info1 info2 =
     | (Some mty1, Some mty2) ->
         check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2
     | (None, Some mty2) ->
-        let mty1 = Mty_ident(Path.Pident id, Nominal.empty) in
+        let mty1 = Mty_ident(Path.Pident id) in
         check_modtype_equiv ~in_eq ~loc env ~mark mty1 mty2 in
   match r with
   | Ok _ as ok -> ok
@@ -1072,9 +1104,8 @@ module Functor_inclusion_diff = struct
 
 
   let keep_expansible_param = function
-    | Mty_ident (_,nom) when not (Nominal.is_empty nom) -> None
     | Mty_ident _ | Mty_alias _ as mty -> Some mty
-    | Mty_signature _ | Mty_functor _ -> None
+    | Mty_signature _ | Mty_functor _ | Mty_with _ -> None
 
   let lookup_expansion { env ; res ; _ } = match res with
     | None -> None
