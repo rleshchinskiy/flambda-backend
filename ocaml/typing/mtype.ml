@@ -40,7 +40,6 @@ let rl_expanding = ref false
 let freshen ~scope mty =
   Subst.modtype (Rescope scope) Subst.identity mty
 
-
 let rec scrape_lazy env mty =
   let open Subst.Lazy in
   match mty with
@@ -62,6 +61,19 @@ and strengthen_lazy ~aliasable env mty p =
   let open Subst.Lazy in
   match scrape_lazy env mty with
     MtyL_signature sg ->
+      let items = force_signature_once sg in
+      begin match mty with
+      | (MtyL_ident _| MtyL_with _) when rl_with ->
+        (* RL TODO: could simplify here *)
+        List.fold_left
+          (fun mty (ns,mc) -> MtyL_with (mty, ns, mc))
+          mty
+          (strengthen_lazy_sig_constraints ~aliasable items p)
+      | _ ->
+        let new_sg = strengthen_lazy_sig_do ~aliasable env items p in
+        MtyL_signature (of_signature_items new_sg)
+      end
+      (*
       let withs, sg = strengthen_lazy_sig ~aliasable env sg p in
       begin match mty with
       | (MtyL_ident _| MtyL_with _) when rl_with ->
@@ -72,6 +84,7 @@ and strengthen_lazy ~aliasable env mty p =
             withs
       | _ -> MtyL_signature sg
       end
+      *)
   | MtyL_functor(Named (Some param, arg), res)
     when !Clflags.applicative_functors ->
       let env =
@@ -86,78 +99,91 @@ and strengthen_lazy ~aliasable env mty p =
         strengthen_lazy ~aliasable:false env res (Papply(p, Pident param)))
   | mty ->
       mty (* RL: FIXME what about constraints in Mty_with? *)
-
-and strengthen_lazy_sig' ~aliasable env sg p =
+      
+and strengthen_lazy_sig_compute ~aliasable sg p =
   let open Subst.Lazy in
-  let strengthen_item (env, withs) = function
+  let add sigelt env = (env, sigelt) in
+  let strengthen_item = function
     | SigL_value(_, _, _) as sigelt ->
-        ((env, withs), Some sigelt)
+        Some (None, add sigelt)
     | SigL_type(id, {type_kind=Type_abstract}, _, _)
       when Btype.is_row_name (Ident.name id) ->
-        ((env, withs), None)
-    | SigL_type(id, decl, rs, vis) ->
-        let (newdecl, newwiths) =
-          match decl.type_manifest, decl.type_private, decl.type_kind with
-            Some _, Public, _ -> (decl, withs)
-          | Some _, Private, (Type_record _ | Type_variant _) -> (decl, withs)
-          | _ ->
-              let name = Pdot(p, Ident.name id) in
+        None
+    | SigL_type(id, decl, rs, vis) as sigelt ->
+        begin match decl.type_manifest, decl.type_private, decl.type_kind with
+          Some _, Public, _ ->
+            Some (None, add sigelt)
+        | Some _, Private, (Type_record _ | Type_variant _) ->
+            Some (None, add sigelt)
+        | _ ->
+            let name = Pdot(p, Ident.name id) in
+            let c = ([Ident.name id], Nominal.Modc_type name) in
+            let strengthen env =
               let manif =
                 Some(Btype.newgenty(Tconstr(name, decl.type_params, ref Mnil)))
               in
-              let decl = if decl.type_kind = Type_abstract then
-                    { decl with type_private = Public; type_manifest = manif }
-                  else
-                    { decl with type_manifest = manif }
+              let decl =
+                if decl.type_kind = Type_abstract then
+                  { decl with type_private = Public; type_manifest = manif }
+                else
+                  { decl with type_manifest = manif }
               in
-              (decl, ([Ident.name id], Nominal.Modc_type name) :: withs )
-        in
-        ((env, newwiths), Some (SigL_type(id, newdecl, rs, vis)))
+              (env, SigL_type(id, decl, rs, vis))
+            in
+            Some (Some c, strengthen)
+        end
     | SigL_typext _ as sigelt ->
-        ((env, withs), Some sigelt)
+        Some (None, add sigelt)
     | SigL_module(id, pres, md, rs, vis) ->
         let name = Pdot(p, Ident.name id) in
-        let str =
-          strengthen_lazy_decl ~aliasable env md name
-        in
-        let env =
-          Env.add_module_declaration_lazy ~update_summary:false id pres md env in
         let constr = Nominal.Modc_module (Mtt_strengthen (Mtt_lookup, name, aliasable)) in
         let bind = ([Ident.name id], constr) in
-        ((env, bind :: withs), Some (SigL_module(id, pres, str, rs, vis)))
+        let strengthen env = 
+          let str =
+            strengthen_lazy_decl ~aliasable env md name
+          in
+          let env =
+            Env.add_module_declaration_lazy ~update_summary:false id pres md env in
+          (env, SigL_module(id, pres, str, rs, vis))
+          in
+        Some (Some bind, strengthen)
         (* Need to add the module in case it defines manifest module types *)
     | SigL_modtype(id, decl, vis) ->
-        let newdecl =
+        let (c,newdecl) =
           match decl.mtdl_type with
           | Some _ when not aliasable ->
               (* [not alisable] condition needed because of recursive modules.
                 See [Typemod.check_recmodule_inclusion]. *)
-              decl
+              (None, decl)
           | _ ->
-              {decl with mtdl_type = Some(MtyL_ident(Pdot(p,Ident.name id)))}
+              let name = Pdot(p,Ident.name id) in
+              let constr = Nominal.Modc_modtype name in
+              let bind = ([Ident.name id], constr) in
+              let newdecl = {decl with mtdl_type = Some(MtyL_ident name)} in
+              (Some bind, newdecl)
         in
-        let env = Env.add_modtype_lazy ~update_summary:false id decl env in
-        let constr = Nominal.Modc_modtype(Pdot(p,Ident.name id))
+        let strengthen env =
+          let env = Env.add_modtype_lazy ~update_summary:false id decl env in
+          (env, SigL_modtype(id, newdecl, vis))
         in
-        let bind = ([Ident.name id], constr)
-        in
-        let new_withs = if aliasable then bind :: withs else withs
-        in
-        ((env, new_withs), Some (SigL_modtype(id, newdecl, vis)))
+        Some (c, strengthen)
         (* Need to add the module type in case it is manifest *)
     | SigL_class _ as sigelt ->
-        ((env, withs), Some sigelt)
+        Some (None, add sigelt)
     | SigL_class_type _ as sigelt ->
-        ((env, withs), Some sigelt)
+        Some (None, add sigelt)
   in
-  let ((_, withs), items) = List.fold_left_map strengthen_item (env, []) sg in
-  (List.rev withs, List.filter_map Fun.id items)
+  List.filter_map strengthen_item sg
 
-and strengthen_lazy_sig ~aliasable env sg p =
-  let sg = Subst.Lazy.force_signature_once sg in
-  let withs, sg = strengthen_lazy_sig' ~aliasable env sg p in
-  withs, Subst.Lazy.of_signature_items sg
+and strengthen_lazy_sig_constraints ~aliasable sg p =
+  List.filter_map fst (strengthen_lazy_sig_compute ~aliasable sg p)
 
+and strengthen_lazy_sig_do ~aliasable env sg p =
+  strengthen_lazy_sig_compute ~aliasable sg p
+  |> List.map snd
+  |> List.fold_left_map (fun env f -> f env) env
+  |> snd
+    
 and strengthen_lazy_decl ~aliasable env md p =
   let open Subst.Lazy in
   let md' = match md.mdl_type with
