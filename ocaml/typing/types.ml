@@ -344,6 +344,7 @@ module Nominal = struct
   type 'a module_constraint =
     | Modc_module of 'a modtype_transform
     | Modc_type of Path.t
+    | Modc_modtype of Path.t
 
   let rec map_transform f = function
     | Mtt_lookup -> Mtt_lookup
@@ -354,7 +355,7 @@ module Nominal = struct
 
   let map_module_constraint f = function
     | Modc_module t -> Modc_module (map_transform f t)
-    | Modc_type _ as x -> x
+    | (Modc_type _ | Modc_modtype _) as x -> x
 end
 
 type module_type =

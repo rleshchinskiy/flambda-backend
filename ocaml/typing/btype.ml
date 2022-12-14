@@ -406,7 +406,7 @@ let type_iterators =
         match constr with
           | Nominal.Modc_module t ->
               it_transform t |> Option.iter it.it_path
-          | Nominal.Modc_type p -> it.it_path p
+          | (Nominal.Modc_type p | Nominal.Modc_modtype p) -> it.it_path p
   
   and it_class_type it = function
       Cty_constr (p, tyl, cty) ->

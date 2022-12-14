@@ -2025,6 +2025,7 @@ let rec nongen_modtype env f = function
       let nongen_constraint = function
       | Nominal.Modc_module t -> nongen_transform t
       | Nominal.Modc_type _ -> false
+      | Nominal.Modc_modtype _ -> false
       in
       nongen_modtype env f mty || nongen_constraint mc
   
@@ -3085,6 +3086,7 @@ let rec normalize_modtype = function
       let normalize_module_constraint = function
       | Nominal.Modc_module t -> normalize_transform t
       | Nominal.Modc_type _ -> ()
+      | Nominal.Modc_modtype _ -> ()
       in
       normalize_modtype mty ;
       normalize_module_constraint mc

@@ -1952,6 +1952,8 @@ and tree_of_module_with ?(ellipsis=false) = function
       ns, Omodc_module (tree_of_modtype_transform ~ellipsis t)
   | ns, Types.Nominal.Modc_type p ->
       ns, Omodc_type (tree_of_path Type p)
+  | ns, Types.Nominal.Modc_modtype p ->
+      ns, Omodc_modtype (tree_of_path Module_type p)
 
 and tree_of_functor_parameter = function
   | Unit ->

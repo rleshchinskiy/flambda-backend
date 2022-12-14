@@ -133,6 +133,7 @@ and out_modtype_transform =
 and out_module_constraint =
   | Omodc_module of out_modtype_transform
   | Omodc_type of out_ident
+  | Omodc_modtype of out_ident
 and out_module_with = string list * out_module_constraint
 and out_sig_item =
   | Osig_class of

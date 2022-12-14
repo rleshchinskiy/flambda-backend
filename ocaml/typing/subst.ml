@@ -587,6 +587,7 @@ and subst_lazy_module_constraint scoping s =
     | Modc_module t ->
         Modc_module (transform t)
     | Modc_type p -> Modc_type (type_path s p)
+    | Modc_modtype p -> Modc_modtype (modtype_path s p)
 
 and lazy_modtype = function
   | Mty_ident p -> MtyL_ident p
