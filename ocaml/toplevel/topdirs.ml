@@ -359,7 +359,7 @@ let parse_warnings ppf iserr s =
 
 (* Typing information *)
 
-let rec trim_signature = function
+let trim_signature = function
     Mty_signature sg ->
       Mty_signature
         (List.map

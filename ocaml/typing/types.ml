@@ -329,10 +329,6 @@ type visibility =
   | Exported
   | Hidden
 
-type aliasability =
-  | Aliasable
-  | NotAliasable
-
 module Nominal = struct
   type 'a modtype_transform =
     | Mtt_lookup

@@ -89,6 +89,7 @@ val compose: t -> t -> t
 val ctype_apply_env_empty:
   (type_expr list -> type_expr -> type_expr list -> type_expr) ref
 
+
 module Lazy : sig
   type module_decl =
     {
@@ -131,6 +132,7 @@ module Lazy : sig
   and functor_parameter =
     | Unit
     | Named of Ident.t option * modtype
+
 
   val of_module_decl : Types.module_declaration -> module_decl
   val of_modtype : Types.module_type -> modtype

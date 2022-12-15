@@ -471,7 +471,7 @@ let () =
 type variance = Co | Contra | Strict
 
 let rec nondep_mty_with_presence env va ids pres mty =
-  match mty with
+  match scrape_with env mty with
     Mty_ident p ->
       begin match Path.find_free_opt ids p with
       | Some id ->
@@ -513,11 +513,7 @@ let rec nondep_mty_with_presence env va ids pres mty =
                     nondep_mty res_env va ids res)
       in
       pres, mty
-  | Mty_with _ ->
-      begin match scrape_with env mty with
-        | Mty_with _ -> assert false (* RL FIXME *)
-        | mty -> nondep_mty_with_presence env va ids pres mty
-      end
+  | Mty_with _ -> assert false (* RL FIXME: What should we do here? *)
   
 and nondep_mty env va ids mty =
   snd (nondep_mty_with_presence env va ids Mp_present mty)
@@ -615,12 +611,12 @@ and enrich_item env p = function
   | item -> item
 
 let rec type_paths env p mty =
-  match scrape_with env mty with
+  match scrape env mty with
     Mty_ident _ -> []
   | Mty_alias _ -> []
   | Mty_signature sg -> type_paths_sig env p sg
   | Mty_functor _ -> []
-  | Mty_with _ -> [] (* RL FIXME *)
+  | Mty_with _ -> [] (* RL FIXME: Do we need to grab paths from constraints? *)
 
 and type_paths_sig env p sg =
   match sg with
@@ -671,13 +667,8 @@ let no_code_needed env mty = no_code_needed_mod env Mp_present mty
 (* Check whether a module type may return types *)
 
 let rec contains_type env mty =
-  match scrape_with env mty with
-    Mty_ident path ->
-      begin try match (Env.find_modtype path env).mtd_type with
-      | None -> raise Exit (* PR#6427 *)
-      | Some mty -> contains_type env mty
-      with Not_found -> raise Exit
-      end
+  match scrape env mty with
+    Mty_ident _ -> raise Exit (* PR#6427 *)
   | Mty_signature sg ->
       contains_type_sig env sg
   | Mty_functor (_, body) ->

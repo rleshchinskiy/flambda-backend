@@ -598,18 +598,6 @@ type visibility =
   | Exported
   | Hidden
 
-type aliasability =
-  | Aliasable
-  | NotAliasable
-
-(*
-type 'a nmty =
-  | Nt_alias of Path.t (* alias to path IF NOT AN ALIAS ALREADY *)
-  | Nt_strenghten of Path.t (* strengthen found decl with path, not aliasable *)
-  | Nt_typeof of Path.t (* set type to strengthened decl of path *)
-  | Nt_typed of Path.t * 'a (* set type to 'a strengthend to Path.t *)
-*)
-
 module Nominal : sig
   type 'a modtype_transform =
     | Mtt_lookup

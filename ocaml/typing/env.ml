@@ -805,18 +805,6 @@ let strengthen =
          aliasable:bool -> t -> Subst.Lazy.modtype ->
          Path.t -> Subst.Lazy.modtype)
 
-(*
-let expand_lazy_nominal =
-  (* to be filled with Mtype.expand_lazy_modtype_with *)
-  ref ((fun _env _p _nom -> assert false) :
-        t -> Path.t -> Subst.Lazy.nominal -> Subst.Lazy.modtype option)
-
-let expand_nominal =
-  (* to be filled with Mtype.expand_lazy_modtype_with *)
-  ref ((fun _env _p _nom -> assert false) :
-        t -> Path.t -> nominal -> module_type option)
-*)      
-
 let scrape_with_lazy =
   (* to be filled with Mtype.expand_lazy_modtype_with *)
   ref ((fun _env _mty -> assert false) :
@@ -1800,8 +1788,8 @@ let rec components_of_module_maker
           {cm_env; cm_prefixing_subst;
            cm_path; cm_addr; cm_mty; cm_shape} : _ result =
   match scrape_alias cm_env cm_mty with
-  | MtyL_signature sg ->
-        let c =
+    MtyL_signature sg ->
+      let c =
         { comp_values = NameMap.empty;
           comp_constrs = NameMap.empty;
           comp_labels = NameMap.empty; comp_types = NameMap.empty;
@@ -1962,7 +1950,7 @@ let rec components_of_module_maker
               NameMap.add (Ident.name id) cltda c.comp_cltypes)
         items_and_paths;
         Ok (Structure_comps c)
-  | Subst.Lazy.MtyL_functor(arg, ty_res) ->
+  | MtyL_functor(arg, ty_res) ->
       let sub = cm_prefixing_subst in
       let scoping = Subst.Rescope (Path.scope cm_path) in
       let open Subst.Lazy in
@@ -1979,8 +1967,8 @@ let rec components_of_module_maker
           fcomp_cache = Hashtbl.create 17;
           fcomp_subst_cache = Hashtbl.create 17 })
   | MtyL_ident _ -> Error No_components_abstract
-  | MtyL_with _ -> Error No_components_abstract
   | MtyL_alias p -> Error (No_components_alias p)
+  | MtyL_with _ -> Error No_components_abstract
 
 (* Insertion of bindings by identifier + path *)
 

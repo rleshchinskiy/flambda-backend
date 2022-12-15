@@ -103,7 +103,7 @@ let rec module_path s path =
 let modtype_path s path =
       match Path.Map.find path s.modtypes with
       | Mty_ident p -> p
-     | Mty_alias _ | Mty_signature _ | Mty_functor _ | Mty_with _ ->
+      | Mty_alias _ | Mty_signature _ | Mty_functor _ | Mty_with _ ->
          fatal_error "Subst.modtype_path"
       | exception Not_found ->
          match path with
