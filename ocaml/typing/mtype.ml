@@ -70,7 +70,6 @@ let strengthen_sig_item ~aliasable p =
     SigL_type(id, decl, _, _) ->
       begin match decl.type_manifest, decl.type_private, decl.type_kind with
         _, _, Type_abstract when Btype.is_row_name (Ident.name id) ->
-          (* RL FIXME: strengthening currently deletes the type *)
           None
       | Some _, Public, _ ->
           None
@@ -142,7 +141,12 @@ and strengthen_lazy ~aliasable env mty p =
       begin match mty with
       | (MtyL_ident _| MtyL_with _) when rl_with ->
         (* RL TODO: could simplify here *)
-        List.fold_left defer mty items 
+        List.filter (function
+          | SigL_type (id, {type_kind = Type_abstract}, _, _) ->
+              not (Btype.is_row_name (Ident.name id))
+          | _ -> true)
+          items
+        |> List.fold_left defer mty
       | _ ->
         let new_sg =
           List.fold_left_map apply env items
@@ -190,6 +194,7 @@ and apply_constraint ns mc env mty =
       let sg = Subst.Lazy.force_signature_once sg
         |> List.fold_left_map (apply_nested_constraint_to_sig_item ns mc) env
         |> snd
+        |> List.filter_map Fun.id
         |> Subst.Lazy.of_signature_items
       in
       MtyL_signature sg
@@ -303,12 +308,14 @@ and apply_nested_constraint_to_sig_item ns mc env item =
   let name = Ident.name (sig_item_id item) in
   let new_item = match ns, item with
     | [s], _ when name = s ->
-        apply_constraint_to_sig_item mc env item
+        Some (apply_constraint_to_sig_item mc env item)
+    | [s], SigL_type(_, {type_kind = Type_abstract}, _, _) when name = s^"#row" ->
+        None
     | s :: ns, SigL_module(id, pres, md, rs, vis) when name = s ->
         let md = { md with mdl_type = Subst.Lazy.MtyL_with (md.mdl_type, ns, mc) }
         in
-        SigL_module(id, pres, md, rs, vis)
-    | _ -> item
+        Some (SigL_module(id, pres, md, rs, vis))
+    | _ -> Some (item)
   in
   add_sig_item env item, new_item
 
