@@ -707,14 +707,19 @@ let merge_constraint initial_env loc sg lid constr =
         let mty = Mtype.scrape_for_type_of ~remove_aliases sig_env mty in
         let md'' = { md' with md_type = mty } in
         let newmd = Mtype.strengthen_decl ~aliasable:false sig_env md'' path in
+        let coercion = Includemod.modtypes  ~mark:Mark_both ~loc sig_env
+                 newmd.md_type md.md_type
+        in
         if rl_debugging then (
           Format.printf "/With_module@."
         );
-        ignore(Includemod.modtypes  ~mark:Mark_both ~loc sig_env
-                 newmd.md_type md.md_type);
+        let modc = match coercion with
+          | Tcoerce_none -> Some (mty, newmd.md_type)
+          | _ -> None
+        in
         return
           ~replace_by:(Some(Sig_module(id, pres, newmd, rs, priv)))
-          (Pident id, lid, Twith_module (path, lid'), Some (mty, newmd.md_type))
+          (Pident id, lid, Twith_module (path, lid'), modc)
     | Sig_module(id, _, md, _rs, _), [s], With_modsubst (lid',path,md')
       when Ident.name id = s ->
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
