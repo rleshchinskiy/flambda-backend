@@ -738,7 +738,7 @@ let merge_constraint initial_env loc sg lid constr =
                  and just check that the constraint is correct *)
               item
           | (Mty_ident _ | Mty_with _) as mty, _, Some (ns,mc) ->
-              let newmd = {md with md_type = Mty_with (mty,ns,mc)} in
+              let newmd = {md with md_type = Mty_with (mty,s::ns,mc)} in
               Sig_module(id, Mp_present, newmd, rs, priv)
           | _ ->
               let newmd = {md with md_type = Mty_signature newsg} in
