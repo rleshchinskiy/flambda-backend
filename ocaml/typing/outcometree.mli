@@ -127,7 +127,7 @@ type out_module_type =
 and out_modtype_transform =
   | Omtt_lookup
   | Omtt_exactly of out_module_type
-  | Omtt_strengthen of out_modtype_transform * out_ident * bool
+  | Omtt_strengthen of out_modtype_transform * out_ident
   | Omtt_dot of out_modtype_transform * string
   | Omtt_apply of out_modtype_transform * out_ident
 and out_module_constraint =

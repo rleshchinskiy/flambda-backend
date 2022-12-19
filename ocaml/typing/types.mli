@@ -604,8 +604,8 @@ module Nominal : sig
         (* look up the type of the thing whose type is being transformed *)
     | Mtt_exactly of 'a
         (* use this exact type *)
-    | Mtt_strengthen of 'a modtype_transform * Path.t * bool
-        (* strengthen the type produced by the transform (bool is aliasable) *)
+    | Mtt_strengthen of 'a modtype_transform * Path.t
+        (* strengthen the type produced by the transform *)
     | Mtt_dot of 'a modtype_transform * string
         (* project from the type produced by the transform *)
     | Mtt_apply of 'a modtype_transform *  Path.t

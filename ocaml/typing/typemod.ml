@@ -770,7 +770,7 @@ let merge_constraint initial_env loc sg lid constr =
                   Some wm.md.md_type
             in
             Option.map (fun mty ->
-              let t = Nominal.Mtt_strengthen (Nominal.Mtt_exactly mty, wm.path, false)
+              let t = Nominal.Mtt_strengthen (Nominal.Mtt_exactly mty, wm.path)
               in
               (namelist, Nominal.Modc_module t)) mty
         | _, _ -> None
@@ -2012,7 +2012,7 @@ let rec nongen_modtype env f = function
         | Mtt_exactly mty -> nongen_modtype env f mty
           (* RL FIXME: Is this correct? What if the constraint doesn't
               change the underlying type? *)
-        | Mtt_strengthen (t,_,_) -> nongen_transform t
+        | Mtt_strengthen (t,_) -> nongen_transform t
         | Mtt_dot (t,_) ->
           (* RL FIXME: What if tp does constan a non-gen tyvar but the
               projection doesn't? *)
@@ -3079,7 +3079,7 @@ let rec normalize_modtype = function
       let rec normalize_transform = function
       | Mtt_lookup -> ()
       | Mtt_exactly mty -> normalize_modtype mty
-      | Mtt_strengthen (t,_,_) -> normalize_transform t
+      | Mtt_strengthen (t,_) -> normalize_transform t
       | Mtt_dot (t,_) -> normalize_transform t
       | Mtt_apply (t,_) -> normalize_transform t
       in

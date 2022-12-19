@@ -390,11 +390,11 @@ let type_iterators =
           | Mtt_exactly mty ->
               it.it_module_type it mty;
               None
-          | Mtt_strengthen (Mtt_exactly mty, p, _) ->
+          | Mtt_strengthen (Mtt_exactly mty, p) ->
               it.it_module_type it mty;
               it.it_path p;
               Some p
-          | Mtt_strengthen (t, p, _) ->
+          | Mtt_strengthen (t, p) ->
               it.it_path p;
               it_transform t
           | Mtt_dot (t,s) ->

@@ -1940,8 +1940,8 @@ and tree_of_modtype_transform ?(ellipsis=false) =
   function
   | Mtt_lookup -> Omtt_lookup
   | Mtt_exactly t -> Omtt_exactly (tree_of_modtype ~ellipsis t)
-  | Mtt_strengthen (t,p,a) ->
-      Omtt_strengthen (tree_of_modtype_transform ~ellipsis t, tree_of_path Module p, a)
+  | Mtt_strengthen (t,p) ->
+      Omtt_strengthen (tree_of_modtype_transform ~ellipsis t, tree_of_path Module p)
   | Mtt_dot (t,s) ->
       Omtt_dot (tree_of_modtype_transform ~ellipsis t, s)
   | Mtt_apply (t,p) ->

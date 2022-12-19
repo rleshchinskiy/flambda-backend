@@ -333,7 +333,7 @@ module Nominal = struct
   type 'a modtype_transform =
     | Mtt_lookup
     | Mtt_exactly of 'a
-    | Mtt_strengthen of 'a modtype_transform * Path.t * bool
+    | Mtt_strengthen of 'a modtype_transform * Path.t
     | Mtt_dot of 'a modtype_transform * string
     | Mtt_apply of 'a modtype_transform *  Path.t
 
@@ -345,7 +345,7 @@ module Nominal = struct
   let rec map_transform f = function
     | Mtt_lookup -> Mtt_lookup
     | Mtt_exactly mty -> Mtt_exactly (f mty)
-    | Mtt_strengthen (t,p,a) -> Mtt_strengthen (map_transform f t, p, a)
+    | Mtt_strengthen (t,p) -> Mtt_strengthen (map_transform f t, p)
     | Mtt_dot (t,s) -> Mtt_dot (map_transform f t, s)
     | Mtt_apply (t,p) -> Mtt_apply (map_transform f t, p)
 

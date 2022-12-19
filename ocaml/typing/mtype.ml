@@ -81,7 +81,11 @@ let strengthen_sig_item ~aliasable p =
       end
   | SigL_module(id, _, _, _, _) ->
       let name = Pdot(p, Ident.name id) in
-      Some (Nominal.Modc_module (Mtt_strengthen (Mtt_lookup, name, aliasable)))
+      let t = if aliasable
+          then Nominal.Mtt_exactly (MtyL_alias name)
+          else Nominal.Mtt_strengthen (Mtt_lookup, name)
+        in
+      Some (Nominal.Modc_module t)
   | SigL_modtype(id, decl, _) ->
       begin match decl.mtdl_type with
         | Some _ when not aliasable ->
@@ -214,12 +218,15 @@ and transform env mty =
   let open Nominal in
   function
   | Mtt_lookup -> mty
-  | Mtt_exactly mty -> mty
-  | Mtt_strengthen (t,p,a) ->
+  | Mtt_exactly mty' ->
+      begin match mty with
+        | MtyL_alias _ -> mty
+        | _ -> mty'
+      end
+  | Mtt_strengthen (t,p) ->
       begin match transform env mty t with
       | MtyL_alias _ as mty -> mty
-      | _ when a -> MtyL_alias p
-      | mty -> strengthen_lazy ~aliasable:a env mty p
+      | mty -> strengthen_lazy ~aliasable:false env mty p
       end
   | Mtt_dot (t,s) ->
       let mty =

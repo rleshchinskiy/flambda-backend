@@ -647,10 +647,9 @@ and print_out_modtype_transform ppf =
   let rec print parens ppf = function
   | Omtt_lookup -> pp_print_char ppf '*'
   | Omtt_exactly mty -> print_out_module_type ppf mty
-  | Omtt_strengthen (t,p,a) ->
-      parens (fun () -> fprintf ppf "%a%s%a"
+  | Omtt_strengthen (t,p) ->
+      parens (fun () -> fprintf ppf "%a/%a"
         (print atomic) t
-        (if a then "/=" else "/")
         print_ident p)
   | Omtt_dot (t,s) ->
       fprintf ppf "%a.%s"

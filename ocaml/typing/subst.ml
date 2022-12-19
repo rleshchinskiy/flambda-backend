@@ -579,7 +579,7 @@ and subst_lazy_module_constraint scoping s =
   let rec transform = function
     | Mtt_lookup -> Mtt_lookup
     | Mtt_exactly mty -> Mtt_exactly (subst_lazy_modtype scoping s mty)
-    | Mtt_strengthen (t,p,a) -> Mtt_strengthen (transform t, module_path s p, a)
+    | Mtt_strengthen (t,p) -> Mtt_strengthen (transform t, module_path s p)
     | Mtt_dot (t,s) -> Mtt_dot (transform t, s)
     | Mtt_apply (t,p) -> Mtt_apply (transform t, module_path s p)
   in
