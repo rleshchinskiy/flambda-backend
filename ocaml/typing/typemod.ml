@@ -29,6 +29,7 @@ type rl_with =
   | Rl_with_strengthened
 
 let rl_with = match Sys.getenv_opt "RL_WITH" with
+  | _ when true -> Rl_with_unstrengthened
   | None -> Rl_with_none
   | Some "s" -> Rl_with_strengthened
   | Some _ -> Rl_with_unstrengthened
@@ -760,11 +761,6 @@ let merge_constraint initial_env loc sg lid constr =
         let nom = match constr, rl_with with
         | _, Rl_with_none -> None
         | With_module wm, _ ->             
-            if rl_debugging then (
-              Format.printf "@[<hv 2>with %a %a@]@."
-                Printtyp.path wm.path
-                Printtyp.modtype wm.md.md_type
-            );
             assert (not wm.remove_aliases);
             let mty = match rl_with, x with
               | Rl_with_none, _ -> None

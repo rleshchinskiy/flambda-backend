@@ -21,7 +21,13 @@ open Types
 
 let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
 
-let rl_with = Option.is_some (Sys.getenv_opt "RL_WITH")
+let rl_with = true || Option.is_some (Sys.getenv_opt "RL_WITH")
+(*
+let rl_with = true
+*)
+
+let rl_simplify = true || Option.is_some (Sys.getenv_opt "RL_SIMPLIFY")
+
 
 (*
 let rl_pr8548 = 
@@ -63,6 +69,56 @@ let sig_item_id =
   | SigL_class (id, _, _, _)
   | SigL_class_type (id, _, _, _)
     -> id
+
+let rec compose t1 =
+  let open Subst.Lazy in
+  let open Types.Nominal in
+  function
+  | Mtt_lookup -> t1
+  | Mtt_exactly mty -> Mtt_exactly mty
+  | Mtt_strengthen (t2,p) ->
+      begin match compose t1 t2 with
+      | Mtt_strengthen _ as t -> t
+      | Mtt_exactly (MtyL_alias _) as t -> t
+      | t -> Mtt_strengthen (t,p)
+      end
+  | Mtt_dot (t2,s) -> Mtt_dot (compose t1 t2,s)
+  | Mtt_apply (t2,p) -> Mtt_apply (compose t1 t2,p)
+
+module SelMap = Stdlib.Map.Make(struct
+  type t = string list
+  let compare = Stdlib.compare
+end)
+
+(*
+module XXX = struct
+  module Map = Stdlib.Map.Make(Stdlib.String)
+  type node = Node of Subst.Lazy.modtype Types.Nominal.module_constraint option * t
+    and t = node Map.t
+end
+*)
+
+let rec simplify bs =
+  let open Subst.Lazy in
+  let open Types.Nominal in
+  function
+  | MtyL_with (mty,ns,mc) ->
+    begin match mc with
+    | Modc_module t ->
+      let bs = SelMap.update ns (function
+        | Some t' -> Some (compose t t')
+        | None -> Some t) bs in
+      let mty,bs = simplify bs mty in
+      begin match SelMap.find_opt ns bs with
+      | Some t -> MtyL_with (mty,ns,Modc_module t), SelMap.remove ns bs
+      | None -> mty, bs
+      end
+    | _ ->
+      let mty,bs = simplify bs mty in
+      MtyL_with (mty,ns,mc), bs
+    end
+  | mty -> mty, bs
+
 
 let strengthen_sig_item ~aliasable p =
   let open Subst.Lazy in
@@ -149,12 +205,15 @@ and strengthen_lazy ~aliasable env mty p =
       begin match mty with
       | (MtyL_ident _| MtyL_with _) when rl_with ->
         (* RL TODO: could simplify here *)
-        List.filter (function
-          | SigL_type (id, {type_kind = Type_abstract}, _, _) ->
-              not (Btype.is_row_name (Ident.name id))
-          | _ -> true)
-          items
-        |> List.fold_left defer mty
+        let mty = List.filter (function
+            | SigL_type (id, {type_kind = Type_abstract}, _, _) ->
+                not (Btype.is_row_name (Ident.name id))
+            | _ -> true)
+            items
+          |> List.fold_left defer mty
+        in
+        (* mty *)
+        if rl_simplify then fst (simplify SelMap.empty mty) else mty
       | _ ->
         let new_sg =
           List.fold_left_map apply env items
@@ -185,12 +244,14 @@ and strengthen_lazy_decl ~aliasable env md p =
   | _ when aliasable -> {md with mdl_type = MtyL_alias p}
   | mty -> {md with mdl_type = strengthen_lazy ~aliasable env mty p}
   in
+  (*
   if rl_debugging then (
     Format.printf "@[<hv 2>strengthen_lazy_decl %a@ %a@ %a@]@."
       Printtyp.path p
       Printtyp.modtype (force_modtype md.mdl_type)
       Printtyp.modtype (force_modtype md'.mdl_type)
   );
+  *)
   md'
 
 (* Applies a with constraint, trying to produce a type which has no with
@@ -222,16 +283,16 @@ and transform env mty =
   let open Nominal in
   function
   | Mtt_lookup -> mty
-  | Mtt_exactly mty' ->
+  | Mtt_exactly mty -> mty
+      (*
       begin match mty with
         | MtyL_alias _ -> mty
         | _ -> mty'
       end
+      *)
   | Mtt_strengthen (t,p) ->
-      begin match transform env mty t with
-      | MtyL_alias _ as mty -> mty
-      | mty -> strengthen_lazy ~aliasable:false env mty p
-      end
+      let mty = transform env mty t in
+      strengthen_lazy ~aliasable:false env mty p
   | Mtt_dot (t,s) ->
       let mty =
         transform env mty t
@@ -282,21 +343,29 @@ and apply_constraint_to_sig_item mc env item =
   let open Subst.Lazy in
   match mc, item with
   | Nominal.Modc_module t, SigL_module(id, pres, md, rs, vis) ->
-    let str = {md with mdl_type = transform env md.mdl_type t}
+    let mty = match md.mdl_type with
+      | MtyL_alias _ as mty -> mty
+      | mty -> transform env mty t
     in
+    let str = {md with mdl_type = mty}
+    in
+      (*
       if rl_debugging then (
         Format.printf "@[<hv 2>constrain@ %a@ %a@]@."
           Printtyp.modtype (force_modtype md.mdl_type)
           Printtyp.modtype (force_modtype str.mdl_type)
       );
+      *)
       SigL_module (id, pres, str, rs, vis)
 
   | Nominal.Modc_type p, SigL_type(id, decl, rs, vis) ->
+      (*
       if rl_debugging then (
         Format.printf "@[<hv 2>renaming %a to %a@]@."
           Printtyp.ident id
           Printtyp.path p
       );
+      *)
       let manif = 
             Some(Btype.newgenty(Tconstr(p, decl.type_params, ref Mnil)))
       in
@@ -323,6 +392,7 @@ and apply_nested_constraint_to_sig_item ns mc env item =
     | [s], SigL_type(_, {type_kind = Type_abstract}, _, _) when name = s^"#row" ->
         None
     | s :: ns, SigL_module(id, pres, md, rs, vis) when name = s ->
+        (* RL FIXME: ignore aliases *)
         let md = { md with mdl_type = Subst.Lazy.MtyL_with (md.mdl_type, ns, mc) }
         in
         Some (SigL_module(id, pres, md, rs, vis))
@@ -346,14 +416,20 @@ let strengthen_decl ~aliasable env md p =
   let md' = strengthen_lazy_decl ~aliasable env
               (Subst.Lazy.of_module_decl md) p in
   let md'' = Subst.Lazy.force_module_decl md' in
+  (*
   if rl_debugging then (
     Format.printf "@[<hv 1>strengthen_decl %a@ %a@ %a@]@."
       Printtyp.path p
       Printtyp.modtype md.md_type
       Printtyp.modtype md''.md_type
   );
-    md''
-  
+  *)
+  md''
+
+let apply_transform env t mty =
+  Nominal.map_transform Subst.Lazy.of_modtype t
+  |> transform env (Subst.Lazy.of_modtype mty)
+  |> Subst.Lazy.force_modtype
   
 let rec sig_make_manifest sg =
   match sg with

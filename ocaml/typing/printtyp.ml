@@ -41,7 +41,8 @@ let rl_print_with =
   match Sys.getenv_opt "RL_PRINT_WITH" with
   | Some "w" -> Rlpw_with_only
   | Some "b" -> Rlpw_both
-  | _ -> Rlpw_expand_only
+  | Some "x" -> Rlpw_expand_only
+  | _ -> Rlpw_both
 
 (* Print a long identifier *)
 
@@ -2053,6 +2054,8 @@ and functor_param ~sep ~custom_printer id q =
 let modtype ppf mty = !Oprint.out_module_type ppf (tree_of_modtype mty)
 let modtype_declaration id ppf decl =
   !Oprint.out_sig_item ppf (tree_of_modtype_declaration id decl)
+let modtype_transform ppf t =
+  !Oprint.out_modtype_transform ppf (tree_of_modtype_transform t)
 
 (* For the toplevel: merge with tree_of_signature? *)
 

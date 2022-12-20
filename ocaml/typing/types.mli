@@ -616,6 +616,7 @@ module Nominal : sig
     | Modc_type of Path.t
     | Modc_modtype of Path.t
 
+  val map_transform : ('a -> 'b) -> 'a modtype_transform -> 'b modtype_transform
   val map_module_constraint : ('a -> 'b) -> 'a module_constraint -> 'b module_constraint
 end
 
