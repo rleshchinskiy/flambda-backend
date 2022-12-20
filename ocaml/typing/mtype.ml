@@ -79,13 +79,17 @@ let strengthen_sig_item ~aliasable p =
           let name = Pdot(p, Ident.name id) in
           Some (Nominal.Modc_type name)
       end
-  | SigL_module(id, _, _, _, _) ->
-      let name = Pdot(p, Ident.name id) in
-      let t = if aliasable
-          then Nominal.Mtt_exactly (MtyL_alias name)
-          else Nominal.Mtt_strengthen (Mtt_lookup, name)
+  | SigL_module(id, _, md, _, _) ->
+      begin match md.mdl_type with
+      | MtyL_alias _ -> None
+      | _ ->
+        let name = Pdot(p, Ident.name id) in
+        let t = if aliasable
+            then Nominal.Mtt_exactly (MtyL_alias name)
+            else Nominal.Mtt_strengthen (Mtt_lookup, name)
         in
-      Some (Nominal.Modc_module t)
+        Some (Nominal.Modc_module t)
+      end
   | SigL_modtype(id, decl, _) ->
       begin match decl.mtdl_type with
         | Some _ when not aliasable ->
