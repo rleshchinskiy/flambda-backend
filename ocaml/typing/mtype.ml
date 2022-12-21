@@ -176,6 +176,10 @@ let rec scrape_lazy ?(rescope=false) env mty =
       with Not_found ->
         mty
       end
+  | MtyL_strengthen (mty,p) ->
+      (* RL FIXME: rescope when strengthening? *)
+      let mty = strengthen_lazy ~aliasable:false env mty p in
+      scrape_lazy ~rescope env mty
   | MtyL_with (base, ns, mc) ->
       begin match apply_constraint ns mc env base with
         | MtyL_with _ as mty -> mty
@@ -275,15 +279,26 @@ and apply_constraint ns mc env mty =
       let mty = (Env.find_module_lazy p env).mdl_type in
       apply_constraint ns mc env mty (* (rescope mty) *) (* RL FIXME: was not doing this before a bug *)
       *)
+  | MtyL_strengthen (mty,p) ->
+      let mty = strengthen_lazy ~aliasable:false env mty p in
+      apply_constraint ns mc env mty
   | (MtyL_ident _ | MtyL_with _) as mty -> MtyL_with (mty,ns,mc)
 
-and transform env mty =
+and transform _env mty =
+  let open Subst.Lazy in
   let open Nominal in
+  let add_strengthen mty p = match mty with
+    | MtyL_alias _ -> mty
+    | MtyL_strengthen _ -> mty
+    | _ -> MtyL_strengthen (mty,p)
+  in
   function
-  | Mtt_strengthen p -> strengthen_lazy ~aliasable:false env mty p
+  | Mtt_strengthen p -> (* strengthen_lazy ~aliasable:false env mty p *)
+      add_strengthen mty p
   | Mtt_replace (mty,p) ->
     begin match p with
-    | Some p -> strengthen_lazy ~aliasable:false env mty p
+    | Some p -> (* strengthen_lazy ~aliasable:false env mty p *)
+      add_strengthen mty p
     | None -> mty
     end
 
@@ -432,6 +447,10 @@ let rec make_aliases_absent pres mty =
       let _, res = make_aliases_absent Mp_present res in
       pres, MtyL_functor(arg, res)
   | MtyL_ident _ -> pres, mty
+  | MtyL_strengthen (mty,p) ->
+      let pres, res = make_aliases_absent pres mty
+      in
+      pres, MtyL_strengthen (res, p)
   | MtyL_with (mty, ns, mc) ->
       let recurse mty =
         let _, mty = make_aliases_absent pres mty in mty
@@ -486,7 +505,7 @@ let scrape env mty =
 
 let scrape env mty =
   match mty with
-    Mty_ident _ | Mty_with _ ->
+    Mty_ident _ | Mty_strengthen _ | Mty_with _ ->
       Subst.Lazy.force_modtype (scrape_lazy env (Subst.Lazy.of_modtype mty))
   | _ -> mty
 
@@ -555,6 +574,20 @@ let rec nondep_mty_with_presence env va ids pres mty =
                     nondep_mty res_env va ids res)
       in
       pres, mty
+  | Mty_strengthen (mty,p) ->
+    let mty = strengthen ~aliasable:false env mty p in
+    nondep_mty_with_presence env va ids pres mty
+(*
+      begin match Path.find_free_opt ids p with
+      | Some _ ->
+          let mty = strengthen ~aliasable:false env mty p in
+          nondep_mty_with_presence env va ids pres mty
+      | None ->
+          let pres, mty = nondep_mty_with_presence env va ids pres mty
+          in
+          pres, Mty_strengthen (mty,p)
+      end    
+      *)
   | Mty_with _ -> assert false (* RL FIXME: What should we do here? *)
   
 and nondep_mty env va ids mty =
@@ -636,6 +669,9 @@ let rec enrich_modtype env p mty =
   match scrape_with env mty with
     Mty_signature sg ->
       Mty_signature(List.map (enrich_item env p) sg)
+  | Mty_strengthen (mty,p1) ->
+      let mty = strengthen ~aliasable:false env mty p1 in
+      enrich_modtype env p mty
   | _ ->
       mty
 
@@ -658,6 +694,7 @@ let rec type_paths env p mty =
   | Mty_alias _ -> []
   | Mty_signature sg -> type_paths_sig env p sg
   | Mty_functor _ -> []
+  | Mty_strengthen _ -> []
   | Mty_with _ -> [] (* RL FIXME: Do we need to grab paths from constraints? *)
 
 and type_paths_sig env p sg =
@@ -684,6 +721,7 @@ let rec no_code_needed_mod env pres mty =
       | Mty_signature sg -> no_code_needed_sig env sg
       | Mty_functor _ -> false
       | Mty_alias _ -> false
+      | Mty_strengthen _ -> false
       | Mty_with _ -> false
     end
 
@@ -717,6 +755,7 @@ let rec contains_type env mty =
       contains_type env body
   | Mty_alias _ ->
       ()
+  | Mty_strengthen _ -> raise Exit
   | Mty_with _ ->
       raise Exit (* RL FIXME: is this right? *)
 

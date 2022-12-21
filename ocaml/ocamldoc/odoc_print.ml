@@ -56,6 +56,7 @@ let simpl_module_type ?code t =
     match t with
       Mty_ident _
     | Mty_alias _
+    | Mty_strengthen _
     | Mty_with _ -> t
     | Mty_signature _ ->
         (

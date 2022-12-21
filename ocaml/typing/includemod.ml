@@ -416,6 +416,8 @@ let retrieve_functor_params env mty =
         end
     | Mty_functor (p, res) -> retrieve_functor_params (p :: before) env res
     | Mty_signature _ as res -> List.rev before, res
+    | Mty_strengthen (mty,p) ->
+        retrieve_functor_params before env (Mtype.strengthen ~aliasable:false env mty p)
     | Mty_with _ as res ->
         begin match Mtype.scrape_with env res with
           Mty_with _ -> List.rev before, res
@@ -535,6 +537,16 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
               | Error reason -> Error (Error.After_alias_expansion reason)
           end
     end
+  | (Mty_strengthen (mty1,p1), _) ->
+    let mty1 = Mtype.strengthen ~aliasable:false env mty1 p1 in
+    try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+  | (_, Mty_strengthen(mty2,p2)) ->
+    let mty2 = Subst.Lazy.of_modtype mty2
+          |> Subst.Lazy.modtype Subst.Keep subst
+    in
+    let p2 = Subst.module_path subst p2 in
+    let mty2 = Mtype.strengthen_lazy ~aliasable:false env mty2 p2 in
+    try_modtypes ~in_eq ~loc env ~mark (*subst*)  Subst.identity mty1 (Subst.Lazy.force_modtype mty2) orig_shape
   (* Expand aliases before with: expanding with should never produce an alias
      but expanding an alias can produce with. *)
   | (Mty_with _, _) ->
@@ -673,7 +685,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
     else incl ()
 
 and shortcut env subst mty1 mty2 =
-    let rec constraints cs = function
+  let rec constraints cs = function
     | Mty_with (mty,ns,mc) ->
         constraints ((ns,mc) :: cs) mty
     | mty -> mty, cs
@@ -702,6 +714,9 @@ and shortcut env subst mty1 mty2 =
         shallow_equal_modtypes mty1 mty2
         && ns1 = ns2
         && shallow_equal_constraints mc1 mc2
+    | Mty_strengthen (mty1,p1), Mty_strengthen (mty2,p2) ->
+        shallow_equal_modtypes mty1 mty2
+        && equal_module_paths env p1 subst p2
     | _, _ -> false
   and shallow_equal_constraints mc1 mc2 =
     let open Nominal in
@@ -793,6 +808,9 @@ and shortcut env subst mty1 mty2 =
       let p1 = Env.normalize_modtype_path env p1 in
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
       Path.same p1 p2 && *) shortcut_constraints' cs1 cs2
+  | (Mty_strengthen (mty1,p1),[]), (Mty_strengthen (mty2,p2),[]) ->
+      shallow_equal_modtypes mty1 mty2
+      && equal_module_paths env p1 subst p2
   | _ -> false
 
 (* Functor parameters *)
@@ -1227,7 +1245,7 @@ module Functor_inclusion_diff = struct
 
   let keep_expansible_param = function
     | Mty_ident _ | Mty_alias _ as mty -> Some mty
-    | Mty_signature _ | Mty_functor _ | Mty_with _ -> None
+    | Mty_signature _ | Mty_functor _ | Mty_strengthen _ | Mty_with _ -> None
 
   let lookup_expansion { env ; res ; _ } = match res with
     | None -> None

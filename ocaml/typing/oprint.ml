@@ -627,6 +627,11 @@ and print_simple_out_module_type ppf =
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple
+  | Omty_strengthen (mty,id,mty_alt) ->
+     fprintf ppf "(%a/%a%a)"
+      print_simple_out_module_type mty
+      print_ident id
+      (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt
   | Omty_with (mty, cs, mty_alt) ->
     let rec print_constrs sep ppf = function
     | [] -> ()
@@ -636,7 +641,7 @@ and print_simple_out_module_type ppf =
         print_out_module_with c
         (print_constrs "and") cs
   in
-    fprintf ppf "@[<hv 2>%a%a%a@;<1 -2>@]"
+    fprintf ppf "@[<hv 2>(%a%a%a)@;<1 -2>@]"
       print_simple_out_module_type mty
       (print_constrs "with") cs
       (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt

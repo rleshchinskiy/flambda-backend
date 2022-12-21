@@ -2001,6 +2001,7 @@ let rec nongen_modtype env f = function
             Env.add_module ~arg:true id Mp_present param env
       in
       nongen_modtype env f body
+  | Mty_strengthen (mty,_ ) -> nongen_modtype env f mty
   | Mty_with (mty,_,mc) ->
       let open Nominal in
       (* RL FIXME: It's possible that the expansion of a type with constraints
@@ -2217,7 +2218,7 @@ and package_constraints env loc mty constrs =
         let rec report = function
           Mty_ident p -> raise(Error(loc, env, Cannot_scrape_package_type p))
         | Mty_with (mty,_,_) -> report mty
-        | Mty_functor _ | Mty_alias _ | Mty_signature _ -> assert false
+        | Mty_functor _ | Mty_alias _ | Mty_signature _ | Mty_strengthen _ -> assert false
         in
         report mty
   end
@@ -3063,6 +3064,7 @@ let rec normalize_modtype = function
   | Mty_alias _ -> ()
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body
+  | Mty_strengthen (mty,_) -> normalize_modtype mty
   | Mty_with (mty,_,mc) ->
       let open Nominal in
       let normalize_transform = function

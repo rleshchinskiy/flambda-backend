@@ -1913,6 +1913,19 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       Omty_functor (param, res)
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
+  | Mty_strengthen (mty,p) ->
+    let expanded () = 
+      let mty = !Env.strengthen ~aliasable:false !printing_env (Subst.Lazy.of_modtype mty) p in
+      let mty = Subst.Lazy.force_modtype mty in
+      tree_of_modtype ~ellipsis mty
+    in
+    begin match rl_print_with with
+    | Rlpw_expand_only -> expanded ()
+    | Rlpw_with_only ->
+        Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, None)
+    | Rlpw_both ->
+        Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, Some (expanded ()))
+    end
   | Mty_with (_,_,_) as mty ->
       let rec collect cs = function
         | Mty_with (mty,ns,mc) ->

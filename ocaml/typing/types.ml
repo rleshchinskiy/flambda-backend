@@ -353,6 +353,7 @@ type module_type =
   | Mty_signature of signature
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
+  | Mty_strengthen of module_type * Path.t
   | Mty_with of module_type * string list * module_constraint
 
 and module_constraint = module_type Nominal.module_constraint
