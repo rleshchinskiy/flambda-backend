@@ -581,8 +581,7 @@ and subst_lazy_module_constraint scoping s =
     | Modc_module t ->
         let t = match t with
           | Mtt_strengthen p -> Mtt_strengthen (module_path s p)
-          | Mtt_replace (mty,p) ->
-              Mtt_replace (subst_lazy_modtype scoping s mty, Option.map (module_path s) p)
+          | Mtt_replace mty -> Mtt_replace (subst_lazy_modtype scoping s mty)
         in
         Modc_module t
     | Modc_type p -> Modc_type (type_path s p)

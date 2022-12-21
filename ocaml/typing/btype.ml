@@ -390,9 +390,7 @@ let type_iterators =
         let open Nominal in
         let it_transform = function
           | Mtt_strengthen p -> it.it_path p
-          | Mtt_replace (mty,p) ->
-            it.it_module_type it mty;
-            Option.iter it.it_path p
+          | Mtt_replace mty -> it.it_module_type it mty
         in
         it.it_module_type it mty;
         match constr with

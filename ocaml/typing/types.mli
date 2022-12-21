@@ -601,7 +601,7 @@ type visibility =
 module Nominal : sig
   type 'a modtype_transform =
     | Mtt_strengthen of Path.t
-    | Mtt_replace of 'a * Path.t option
+    | Mtt_replace of 'a
 
   type 'a module_constraint =
     | Modc_module of 'a modtype_transform

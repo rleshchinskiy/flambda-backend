@@ -771,7 +771,7 @@ let merge_constraint initial_env loc sg lid constr =
                   Some wm.md.md_type
             in
             Option.map (fun mty ->
-              let t = Nominal.Mtt_replace (mty, Some wm.path)
+              let t = Nominal.Mtt_replace (Mtype.make_strengthen mty wm.path)
               in
               (namelist, Nominal.Modc_module t)) mty
         | _, _ -> None
@@ -2009,7 +2009,7 @@ let rec nongen_modtype env f = function
           Do we need to return a module_type option here which expands as much
           as necessary to get rid of non-gen tyvars? *)
       let nongen_transform = function
-        | Mtt_replace (mty,_) -> nongen_modtype env f mty
+        | Mtt_replace mty -> nongen_modtype env f mty
         | _ -> false
       in
       let nongen_constraint = function
@@ -3068,7 +3068,7 @@ let rec normalize_modtype = function
   | Mty_with (mty,_,mc) ->
       let open Nominal in
       let normalize_transform = function
-        | Mtt_replace (mty,_) -> normalize_modtype mty
+        | Mtt_replace mty -> normalize_modtype mty
         | _ -> ()
       in
       let normalize_module_constraint = function

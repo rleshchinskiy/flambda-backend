@@ -748,14 +748,8 @@ and shortcut env subst mty1 mty2 =
     match t1, t2 with
     | Mtt_strengthen p1, Mtt_strengthen p2 ->
         eq_mod_paths p1 p2
-    | Mtt_replace (mty1,p), Mtt_replace (mty2,q) ->
-      if shallow_equal_modtypes mty1 mty2
-        then match p, q with
-          | None, None -> true
-          | Some p, Some q -> eq_mod_paths p q
-          | _ -> false
-        else
-          false
+    | Mtt_replace mty1, Mtt_replace mty2 ->
+        shallow_equal_modtypes mty1 mty2
     | _, _ -> false
   in
   let shortcut_constraint c1 c2 =
@@ -768,7 +762,7 @@ and shortcut env subst mty1 mty2 =
         in
         if not ok && rl_debugging then (
           let printt ppf = function
-            | Mtt_replace (Mty_alias p, None) ->
+            | Mtt_replace (Mty_alias p) ->
                 let md = Env.find_module p env
                 in
                 Format.fprintf ppf "module %a : %a"

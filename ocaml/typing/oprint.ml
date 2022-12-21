@@ -645,16 +645,9 @@ and print_simple_out_module_type ppf =
       print_simple_out_module_type mty
       (print_constrs "with") cs
       (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt
-and print_out_modtype_transform ppf (typ, str) =
-  let print_typ ppf = function
-    | Some mty -> print_out_module_type ppf mty
-    | None -> pp_print_char ppf '*'
-  in
-  let print_str ppf = function
-    | Some p -> fprintf ppf "/%a" print_ident p
-    | None -> ()
-  in
-  fprintf ppf "%a%a" print_typ typ print_str str
+and print_out_modtype_transform ppf = function
+  | Omtt_strengthen p -> fprintf ppf "*/%a" print_ident p
+  | Omtt_replace mty -> print_out_module_type ppf mty
 and print_out_module_with ppf =
   let dotted ns = String.concat "." ns in
   function

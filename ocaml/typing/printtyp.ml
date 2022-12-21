@@ -1952,8 +1952,8 @@ let rec tree_of_modtype ?(ellipsis=false) = function
 and tree_of_modtype_transform ?(ellipsis=false) =
   let open Nominal in
   function
-  | Mtt_strengthen p -> None, Some (tree_of_path Module p)
-  | Mtt_replace (mty,p) -> Some (tree_of_modtype ~ellipsis mty), Option.map (tree_of_path Module) p
+  | Mtt_strengthen p -> Omtt_strengthen (tree_of_path Module p)
+  | Mtt_replace mty -> Omtt_replace (tree_of_modtype ~ellipsis mty)
 
 and tree_of_module_with ?(ellipsis=false) = function
   | ns, Types.Nominal.Modc_module t ->

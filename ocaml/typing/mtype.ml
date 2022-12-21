@@ -70,17 +70,24 @@ let sig_item_id =
   | SigL_class_type (id, _, _, _)
     -> id
 
-let compose t1 =
+let make_strengthen mty p = match mty with
+  | Mty_alias _ | Mty_strengthen _ -> mty
+  | _ -> Mty_strengthen (mty,p)
+
+let make_strengthen_lazy mty p =
   let open Subst.Lazy in
+  match mty with
+  | MtyL_alias _ | MtyL_strengthen _ -> mty
+  | _ -> MtyL_strengthen (mty,p)
+
+let compose t1 =
   let open Types.Nominal in
   function
   | Mtt_replace _ as t -> t
   | Mtt_strengthen p ->
       begin match t1 with
       | Mtt_strengthen _ as t -> t
-      | Mtt_replace (_, Some _) as t -> t
-      | Mtt_replace (MtyL_alias _, _) as t -> t
-      | Mtt_replace (mty, None) -> Mtt_replace (mty, Some p)
+      | Mtt_replace mty -> Mtt_replace (make_strengthen_lazy mty p)
       end
 
 module SelMap = Stdlib.Map.Make(struct
@@ -140,7 +147,7 @@ let strengthen_sig_item ~aliasable p =
         let open Types.Nominal in
         let name = Pdot(p, Ident.name id) in
         let t = if aliasable
-            then Mtt_replace (MtyL_alias name, None)
+            then Mtt_replace (MtyL_alias name)
             else Mtt_strengthen name
         in
         Some (Nominal.Modc_module t)
@@ -285,22 +292,10 @@ and apply_constraint ns mc env mty =
   | (MtyL_ident _ | MtyL_with _) as mty -> MtyL_with (mty,ns,mc)
 
 and transform _env mty =
-  let open Subst.Lazy in
   let open Nominal in
-  let add_strengthen mty p = match mty with
-    | MtyL_alias _ -> mty
-    | MtyL_strengthen _ -> mty
-    | _ -> MtyL_strengthen (mty,p)
-  in
   function
-  | Mtt_strengthen p -> (* strengthen_lazy ~aliasable:false env mty p *)
-      add_strengthen mty p
-  | Mtt_replace (mty,p) ->
-    begin match p with
-    | Some p -> (* strengthen_lazy ~aliasable:false env mty p *)
-      add_strengthen mty p
-    | None -> mty
-    end
+  | Mtt_strengthen p -> make_strengthen_lazy mty p
+  | Mtt_replace mty -> mty
 
 and apply_constraint_to_sig_item mc env item =
   let open Subst.Lazy in

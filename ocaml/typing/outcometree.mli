@@ -126,7 +126,8 @@ type out_module_type =
   | Omty_strengthen of out_module_type * out_ident * out_module_type option
   | Omty_with of out_module_type * out_module_with list * out_module_type option
 and out_modtype_transform =
-  out_module_type option * out_ident option
+  | Omtt_strengthen of out_ident
+  | Omtt_replace of out_module_type
 and out_module_constraint =
   | Omodc_module of out_modtype_transform
   | Omodc_type of out_ident
