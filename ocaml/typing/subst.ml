@@ -576,16 +576,14 @@ and force_module_constraint c = Nominal.map_module_constraint force_modtype c
 
 and subst_lazy_module_constraint scoping s =
   let open Types.Nominal in
-  let rec transform = function
-    | Mtt_lookup -> Mtt_lookup
-    | Mtt_exactly mty -> Mtt_exactly (subst_lazy_modtype scoping s mty)
-    | Mtt_strengthen (t,p) -> Mtt_strengthen (transform t, module_path s p)
-    | Mtt_dot (t,s) -> Mtt_dot (transform t, s)
-    | Mtt_apply (t,p) -> Mtt_apply (transform t, module_path s p)
-  in
   function
     | Modc_module t ->
-        Modc_module (transform t)
+        let t = match t with
+          | Mtt_strengthen p -> Mtt_strengthen (module_path s p)
+          | Mtt_replace (mty,p) ->
+              Mtt_replace (subst_lazy_modtype scoping s mty, Option.map (module_path s) p)
+        in
+        Modc_module t
     | Modc_type p -> Modc_type (type_path s p)
     | Modc_modtype p -> Modc_modtype (modtype_path s p)
 

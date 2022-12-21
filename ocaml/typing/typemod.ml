@@ -771,7 +771,7 @@ let merge_constraint initial_env loc sg lid constr =
                   Some wm.md.md_type
             in
             Option.map (fun mty ->
-              let t = Nominal.Mtt_strengthen (Nominal.Mtt_exactly mty, wm.path)
+              let t = Nominal.Mtt_replace (mty, Some wm.path)
               in
               (namelist, Nominal.Modc_module t)) mty
         | _, _ -> None
@@ -2002,31 +2002,19 @@ let rec nongen_modtype env f = function
       in
       nongen_modtype env f body
   | Mty_with (mty,_,mc) ->
+      let open Nominal in
       (* RL FIXME: It's possible that the expansion of a type with constraints
           doesn't contain non-gen tyvars even if the individual components do.
           Do we need to return a module_type option here which expands as much
           as necessary to get rid of non-gen tyvars? *)
-      let rec nongen_transform =
-        let open Nominal in
-        function
-        | Mtt_lookup -> false
-        | Mtt_exactly mty -> nongen_modtype env f mty
-          (* RL FIXME: Is this correct? What if the constraint doesn't
-              change the underlying type? *)
-        | Mtt_strengthen (t,_) -> nongen_transform t
-        | Mtt_dot (t,_) ->
-          (* RL FIXME: What if tp does constan a non-gen tyvar but the
-              projection doesn't? *)
-            nongen_transform t
-        | Mtt_apply (t,_) ->
-            (* RL FIXME: What if tp does constan a non-gen tyvar but the
-                application doesn't? *)
-            nongen_transform t
+      let nongen_transform = function
+        | Mtt_replace (mty,_) -> nongen_modtype env f mty
+        | _ -> false
       in
       let nongen_constraint = function
-      | Nominal.Modc_module t -> nongen_transform t
-      | Nominal.Modc_type _ -> false
-      | Nominal.Modc_modtype _ -> false
+      | Modc_module t -> nongen_transform t
+      | Modc_type _ -> false
+      | Modc_modtype _ -> false
       in
       nongen_modtype env f mty || nongen_constraint mc
   
@@ -3077,12 +3065,9 @@ let rec normalize_modtype = function
   | Mty_functor(_param, body) -> normalize_modtype body
   | Mty_with (mty,_,mc) ->
       let open Nominal in
-      let rec normalize_transform = function
-      | Mtt_lookup -> ()
-      | Mtt_exactly mty -> normalize_modtype mty
-      | Mtt_strengthen (t,_) -> normalize_transform t
-      | Mtt_dot (t,_) -> normalize_transform t
-      | Mtt_apply (t,_) -> normalize_transform t
+      let normalize_transform = function
+        | Mtt_replace (mty,_) -> normalize_modtype mty
+        | _ -> ()
       in
       let normalize_module_constraint = function
       | Nominal.Modc_module t -> normalize_transform t

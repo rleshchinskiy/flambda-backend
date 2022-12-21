@@ -385,27 +385,15 @@ let type_iterators =
         it.it_module_type it mt
     | Mty_with (mty, _, constr) ->
         let open Nominal in
-        let rec it_transform = function
-          | Mtt_lookup -> None
-          | Mtt_exactly mty ->
-              it.it_module_type it mty;
-              None
-          | Mtt_strengthen (Mtt_exactly mty, p) ->
-              it.it_module_type it mty;
-              it.it_path p;
-              Some p
-          | Mtt_strengthen (t, p) ->
-              it.it_path p;
-              it_transform t
-          | Mtt_dot (t,s) ->
-              Option.map (fun p -> Path.Pdot (p,s)) (it_transform t)
-          | Mtt_apply (t,p) ->
-              Option.map (fun q -> Path.Papply (q,p)) (it_transform t)
+        let it_transform = function
+          | Mtt_strengthen p -> it.it_path p
+          | Mtt_replace (mty,p) ->
+            it.it_module_type it mty;
+            Option.iter it.it_path p
         in
         it.it_module_type it mty;
         match constr with
-          | Nominal.Modc_module t ->
-              it_transform t |> Option.iter it.it_path
+          | Nominal.Modc_module t -> it_transform t
           | (Nominal.Modc_type p | Nominal.Modc_modtype p) -> it.it_path p
   
   and it_class_type it = function

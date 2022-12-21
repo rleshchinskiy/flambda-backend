@@ -640,30 +640,16 @@ and print_simple_out_module_type ppf =
       print_simple_out_module_type mty
       (print_constrs "with") cs
       (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt
-and print_out_modtype_transform ppf =
-  let atomic f =
-    pp_print_char ppf '(';
-    f ();
-    pp_print_char ppf ')'
+and print_out_modtype_transform ppf (typ, str) =
+  let print_typ ppf = function
+    | Some mty -> print_out_module_type ppf mty
+    | None -> pp_print_char ppf '*'
   in
-  let rec print parens ppf = function
-  | Omtt_lookup -> pp_print_char ppf '*'
-  | Omtt_exactly mty -> print_out_module_type ppf mty
-  | Omtt_strengthen (t,p) ->
-      parens (fun () -> fprintf ppf "%a/%a"
-        (print atomic) t
-        print_ident p)
-  | Omtt_dot (t,s) ->
-      fprintf ppf "%a.%s"
-        (print atomic) t
-        s
-  | Omtt_apply (t,p) ->
-      parens (fun () -> fprintf ppf "%a(%a)"
-        (print atomic) t
-        print_ident p
-      )
+  let print_str ppf = function
+    | Some p -> fprintf ppf "/%a" print_ident p
+    | None -> ()
   in
-  print (fun f -> f ()) ppf
+  fprintf ppf "%a%a" print_typ typ print_str str
 and print_out_module_with ppf =
   let dotted ns = String.concat "." ns in
   function

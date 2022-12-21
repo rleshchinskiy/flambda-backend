@@ -125,11 +125,7 @@ type out_module_type =
   | Omty_alias of out_ident
   | Omty_with of out_module_type * out_module_with list * out_module_type option
 and out_modtype_transform =
-  | Omtt_lookup
-  | Omtt_exactly of out_module_type
-  | Omtt_strengthen of out_modtype_transform * out_ident
-  | Omtt_dot of out_modtype_transform * string
-  | Omtt_apply of out_modtype_transform * out_ident
+  out_module_type option * out_ident option
 and out_module_constraint =
   | Omodc_module of out_modtype_transform
   | Omodc_type of out_ident

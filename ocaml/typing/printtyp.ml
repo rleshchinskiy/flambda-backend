@@ -1937,16 +1937,10 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       end
 
 and tree_of_modtype_transform ?(ellipsis=false) =
-  let open Types.Nominal in
+  let open Nominal in
   function
-  | Mtt_lookup -> Omtt_lookup
-  | Mtt_exactly t -> Omtt_exactly (tree_of_modtype ~ellipsis t)
-  | Mtt_strengthen (t,p) ->
-      Omtt_strengthen (tree_of_modtype_transform ~ellipsis t, tree_of_path Module p)
-  | Mtt_dot (t,s) ->
-      Omtt_dot (tree_of_modtype_transform ~ellipsis t, s)
-  | Mtt_apply (t,p) ->
-      Omtt_apply (tree_of_modtype_transform ~ellipsis t, tree_of_path Module p)
+  | Mtt_strengthen p -> None, Some (tree_of_path Module p)
+  | Mtt_replace (mty,p) -> Some (tree_of_modtype ~ellipsis mty), Option.map (tree_of_path Module) p
 
 and tree_of_module_with ?(ellipsis=false) = function
   | ns, Types.Nominal.Modc_module t ->

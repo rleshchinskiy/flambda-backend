@@ -511,19 +511,6 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       );
       Ok (Tcoerce_none, orig_shape)
   *)
-  | (Mty_with _, _) ->
-    begin match Mtype.scrape_with env mty1 with
-      Mty_with _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-    end
-  | (_, Mty_with _) ->
-    let mty2 = Subst.Lazy.of_modtype mty2
-          |> Subst.Lazy.modtype Subst.Keep subst
-    in
-    begin match Mtype.scrape_with_lazy env mty2 with
-      MtyL_with _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
-    end
 
   | (Mty_alias p1, Mty_alias p2) ->
       if Env.is_functor_arg p2 env then
@@ -547,6 +534,21 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
               | Ok _ as x -> x
               | Error reason -> Error (Error.After_alias_expansion reason)
           end
+    end
+  (* Expand aliases before with: expanding with should never produce an alias
+     but expanding an alias can produce with. *)
+  | (Mty_with _, _) ->
+    begin match Mtype.scrape_with env mty1 with
+      Mty_with _ -> Error (Error.Mt_core Abstract_module_type)
+    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+    end
+  | (_, Mty_with _) ->
+    let mty2 = Subst.Lazy.of_modtype mty2
+          |> Subst.Lazy.modtype Subst.Keep subst
+    in
+    begin match Mtype.scrape_with_lazy env mty2 with
+      MtyL_with _ -> Error (Error.Mt_core Abstract_module_type)
+    | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
     end
   | (Mty_ident p1, Mty_ident p2) ->
       let p1 = Env.normalize_modtype_path env p1 in
@@ -713,35 +715,32 @@ and shortcut env subst mty1 mty2 =
     | _, _ -> false
   and shallow_equal_transforms t1 t2 =
     let open Nominal in
+    let eq_mod_paths p1 p2 = if equal_module_paths env p1 subst p2
+      then true
+      else (
+        if rl_debugging then (
+          let md1 = Env.find_module p1 env in
+          let md2 = Env.find_module (Subst.module_path subst p2) env in
+          Format.printf "@[<hv 2>couldn't match@ %a : %a@ with@ %a : %a@]@."
+            Printtyp.path p1
+            Printtyp.modtype md1.md_type
+            Printtyp.path p2
+            Printtyp.modtype md2.md_type
+        );
+        false
+      )
+    in
     match t1, t2 with
-    | Mtt_lookup, Mtt_lookup -> true
-    | Mtt_exactly mty1, Mtt_exactly mty2 ->
-        shallow_equal_modtypes mty1 mty2
-    | Mtt_strengthen (t1,p1), Mtt_strengthen (t2,p2) ->
-        let candidate = 
-          shallow_equal_transforms t1 t2
-        (* && equal_module_paths env p1 subst p2 *)
-        in
-        if candidate then (
-          let ok = equal_module_paths env p1 subst p2
-          in
-          if not ok && rl_debugging then (
-            let md1 = Env.find_module p1 env in
-            let md2 = Env.find_module (Subst.module_path subst p2) env in
-            Format.printf "@[<hv 2>couldn't match@ %a : %a@ with@ %a : %a@]@."
-              Printtyp.path p1
-              Printtyp.modtype md1.md_type
-              Printtyp.path p2
-              Printtyp.modtype md2.md_type
-          );
-          ok
-        ) else false
-    | Mtt_dot (t1,s1), Mtt_dot (t2,s2) ->
-        shallow_equal_transforms t1 t2
-        && s1 = s2
-    | Mtt_apply (t1,p1), Mtt_apply(t2,p2) ->
-        shallow_equal_transforms t1 t2
-        && equal_module_paths env p1 subst p2
+    | Mtt_strengthen p1, Mtt_strengthen p2 ->
+        eq_mod_paths p1 p2
+    | Mtt_replace (mty1,p), Mtt_replace (mty2,q) ->
+      if shallow_equal_modtypes mty1 mty2
+        then match p, q with
+          | None, None -> true
+          | Some p, Some q -> eq_mod_paths p q
+          | _ -> false
+        else
+          false
     | _, _ -> false
   in
   let shortcut_constraint c1 c2 =
@@ -754,7 +753,7 @@ and shortcut env subst mty1 mty2 =
         in
         if not ok && rl_debugging then (
           let printt ppf = function
-            | Mtt_exactly (Mty_alias p) ->
+            | Mtt_replace (Mty_alias p, None) ->
                 let md = Env.find_module p env
                 in
                 Format.fprintf ppf "module %a : %a"

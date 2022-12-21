@@ -70,20 +70,18 @@ let sig_item_id =
   | SigL_class_type (id, _, _, _)
     -> id
 
-let rec compose t1 =
+let compose t1 =
   let open Subst.Lazy in
   let open Types.Nominal in
   function
-  | Mtt_lookup -> t1
-  | Mtt_exactly mty -> Mtt_exactly mty
-  | Mtt_strengthen (t2,p) ->
-      begin match compose t1 t2 with
+  | Mtt_replace _ as t -> t
+  | Mtt_strengthen p ->
+      begin match t1 with
       | Mtt_strengthen _ as t -> t
-      | Mtt_exactly (MtyL_alias _) as t -> t
-      | t -> Mtt_strengthen (t,p)
+      | Mtt_replace (_, Some _) as t -> t
+      | Mtt_replace (MtyL_alias _, _) as t -> t
+      | Mtt_replace (mty, None) -> Mtt_replace (mty, Some p)
       end
-  | Mtt_dot (t2,s) -> Mtt_dot (compose t1 t2,s)
-  | Mtt_apply (t2,p) -> Mtt_apply (compose t1 t2,p)
 
 module SelMap = Stdlib.Map.Make(struct
   type t = string list
@@ -139,10 +137,11 @@ let strengthen_sig_item ~aliasable p =
       begin match md.mdl_type with
       | MtyL_alias _ -> None
       | _ ->
+        let open Types.Nominal in
         let name = Pdot(p, Ident.name id) in
         let t = if aliasable
-            then Nominal.Mtt_exactly (MtyL_alias name)
-            else Nominal.Mtt_strengthen (Mtt_lookup, name)
+            then Mtt_replace (MtyL_alias name, None)
+            else Mtt_strengthen name
         in
         Some (Nominal.Modc_module t)
       end
@@ -279,65 +278,14 @@ and apply_constraint ns mc env mty =
   | (MtyL_ident _ | MtyL_with _) as mty -> MtyL_with (mty,ns,mc)
 
 and transform env mty =
-  let open Subst.Lazy in
   let open Nominal in
   function
-  | Mtt_lookup -> mty
-  | Mtt_exactly mty -> mty
-      (*
-      begin match mty with
-        | MtyL_alias _ -> mty
-        | _ -> mty'
-      end
-      *)
-  | Mtt_strengthen (t,p) ->
-      let mty = transform env mty t in
-      strengthen_lazy ~aliasable:false env mty p
-  | Mtt_dot (t,s) ->
-      let mty =
-        transform env mty t
-        |> scrape_lazy ~rescope:false (* RL FIXME: true? *) env
-      in
-      begin match mty with
-        | MtyL_alias p -> MtyL_alias (Path.Pdot (p,s))
-        | MtyL_signature sg ->
-            let pick s = function
-              | (SigL_module(id, _, md, _, _)) when Ident.name id = s -> Some md.mdl_type
-              | _ -> None
-            in
-            let item =
-              Subst.Lazy.force_signature_once sg
-              |> List.find_map (pick s)
-            in
-            begin match item with
-              (* RL FIXME: prefix *)
-              | Some mty -> mty
-              | None -> assert false
-            end
-        | (MtyL_ident _ | MtyL_with _ | MtyL_functor _) -> assert false
-        end
-  | Mtt_apply (t,arg) ->
-      let mty =
-          transform env mty t
-          |> scrape_lazy ~rescope:false (* RL FIXME: true? *) env
-      in
-      begin match mty with
-        | MtyL_alias p -> MtyL_alias (Path.Papply (p,arg))
-        | MtyL_functor (param, mty_res) ->
-            begin match param with
-            | Named (id, mty_param) ->
-              let scope = Ctype.create_scope () in
-              let subst = match id with
-                | None -> Subst.identity
-                | Some p ->
-                    let mty_param = Subst.Lazy.force_modtype mty_param in
-                    Subst.add_module_arg p arg mty_param Subst.identity
-              in
-              Subst.Lazy.modtype (Rescope scope) subst mty_res 
-            | Unit -> assert false (* RL FIXME *)
-            end
-        | MtyL_ident _ | MtyL_with _ | MtyL_signature _ -> assert false
-      end
+  | Mtt_strengthen p -> strengthen_lazy ~aliasable:false env mty p
+  | Mtt_replace (mty,p) ->
+    begin match p with
+    | Some p -> strengthen_lazy ~aliasable:false env mty p
+    | None -> mty
+    end
 
 and apply_constraint_to_sig_item mc env item =
   let open Subst.Lazy in

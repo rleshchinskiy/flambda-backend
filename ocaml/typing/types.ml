@@ -331,23 +331,17 @@ type visibility =
 
 module Nominal = struct
   type 'a modtype_transform =
-    | Mtt_lookup
-    | Mtt_exactly of 'a
-    | Mtt_strengthen of 'a modtype_transform * Path.t
-    | Mtt_dot of 'a modtype_transform * string
-    | Mtt_apply of 'a modtype_transform *  Path.t
+    | Mtt_strengthen of Path.t
+    | Mtt_replace of 'a * Path.t option
 
   type 'a module_constraint =
     | Modc_module of 'a modtype_transform
     | Modc_type of Path.t
     | Modc_modtype of Path.t
 
-  let rec map_transform f = function
-    | Mtt_lookup -> Mtt_lookup
-    | Mtt_exactly mty -> Mtt_exactly (f mty)
-    | Mtt_strengthen (t,p) -> Mtt_strengthen (map_transform f t, p)
-    | Mtt_dot (t,s) -> Mtt_dot (map_transform f t, s)
-    | Mtt_apply (t,p) -> Mtt_apply (map_transform f t, p)
+  let map_transform f = function
+    | Mtt_strengthen _ as t -> t
+    | Mtt_replace (mty,p) -> Mtt_replace (f mty, p)
 
   let map_module_constraint f = function
     | Modc_module t -> Modc_module (map_transform f t)
