@@ -771,9 +771,7 @@ let merge_constraint initial_env loc sg lid constr =
                   Some wm.md.md_type
             in
             Option.map (fun mty ->
-              let t = Nominal.Mtt_replace (Mtype.make_strengthen mty wm.path)
-              in
-              (namelist, Nominal.Modc_module t)) mty
+              (namelist, Nominal.Modc_module (Mtype.make_strengthen env mty wm.path))) mty
         | _, _ -> None
         in
         x, nom, sg
@@ -2004,16 +2002,12 @@ let rec nongen_modtype env f = function
   | Mty_strengthen (mty,_ ) -> nongen_modtype env f mty
   | Mty_with (mty,_,mc) ->
       let open Nominal in
+      let nongen_constraint = function
       (* RL FIXME: It's possible that the expansion of a type with constraints
           doesn't contain non-gen tyvars even if the individual components do.
           Do we need to return a module_type option here which expands as much
           as necessary to get rid of non-gen tyvars? *)
-      let nongen_transform = function
-        | Mtt_replace mty -> nongen_modtype env f mty
-        | _ -> false
-      in
-      let nongen_constraint = function
-      | Modc_module t -> nongen_transform t
+          | Modc_module mty -> nongen_modtype env f mty
       | Modc_type _ -> false
       | Modc_modtype _ -> false
       in
@@ -3066,13 +3060,8 @@ let rec normalize_modtype = function
   | Mty_functor(_param, body) -> normalize_modtype body
   | Mty_strengthen (mty,_) -> normalize_modtype mty
   | Mty_with (mty,_,mc) ->
-      let open Nominal in
-      let normalize_transform = function
-        | Mtt_replace mty -> normalize_modtype mty
-        | _ -> ()
-      in
       let normalize_module_constraint = function
-      | Nominal.Modc_module t -> normalize_transform t
+      | Nominal.Modc_module mty -> normalize_modtype mty
       | Nominal.Modc_type _ -> ()
       | Nominal.Modc_modtype _ -> ()
       in

@@ -1949,15 +1949,9 @@ let rec tree_of_modtype ?(ellipsis=false) = function
         Omty_with (tree_of_modtype ~ellipsis base, cs, expanded)
       end
 
-and tree_of_modtype_transform ?(ellipsis=false) =
-  let open Nominal in
-  function
-  | Mtt_strengthen p -> Omtt_strengthen (tree_of_path Module p)
-  | Mtt_replace mty -> Omtt_replace (tree_of_modtype ~ellipsis mty)
-
 and tree_of_module_with ?(ellipsis=false) = function
-  | ns, Types.Nominal.Modc_module t ->
-      ns, Omodc_module (tree_of_modtype_transform ~ellipsis t)
+  | ns, Types.Nominal.Modc_module mty ->
+      ns, Omodc_module (tree_of_modtype ~ellipsis mty)
   | ns, Types.Nominal.Modc_type p ->
       ns, Omodc_type (tree_of_path Type p)
   | ns, Types.Nominal.Modc_modtype p ->
@@ -2061,8 +2055,6 @@ and functor_param ~sep ~custom_printer id q =
 let modtype ppf mty = !Oprint.out_module_type ppf (tree_of_modtype mty)
 let modtype_declaration id ppf decl =
   !Oprint.out_sig_item ppf (tree_of_modtype_declaration id decl)
-let modtype_transform ppf t =
-  !Oprint.out_modtype_transform ppf (tree_of_modtype_transform t)
 
 (* For the toplevel: merge with tree_of_signature? *)
 

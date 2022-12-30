@@ -527,9 +527,6 @@ let out_functor_parameters =
   ref (fun _ -> failwith "Oprint.out_functor_parameters")
 let out_module_with =
   ref (fun _ -> failwith "Oprint.out_module_with")
-let out_modtype_transform =
-  ref (fun _ -> failwith "Oprint.out_modtype_transform")
-    
 
 (* For anonymous functor arguments, the logic to choose between
    the long-form
@@ -645,16 +642,13 @@ and print_simple_out_module_type ppf =
       print_simple_out_module_type mty
       (print_constrs "with") cs
       (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt
-and print_out_modtype_transform ppf = function
-  | Omtt_strengthen p -> fprintf ppf "*/%a" print_ident p
-  | Omtt_replace mty -> print_out_module_type ppf mty
 and print_out_module_with ppf =
   let dotted ns = String.concat "." ns in
   function
-  | ns, Omodc_module t ->
+  | ns, Omodc_module mty ->
       fprintf ppf "module %s : %a"
         (dotted ns)
-        print_out_modtype_transform t
+        print_out_module_type mty
   | ns, Omodc_type p ->
       fprintf ppf "type %s = %a"
         (dotted ns)
@@ -918,7 +912,6 @@ let _ = out_sig_item := print_out_sig_item
 let _ = out_type_extension := print_out_type_extension
 let _ = out_functor_parameters := print_out_functor_parameters
 let _ = out_module_with := print_out_module_with
-let _ = out_modtype_transform := print_out_modtype_transform
 
 (* Phrases *)
 

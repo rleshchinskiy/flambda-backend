@@ -709,7 +709,7 @@ and shortcut env subst mty1 mty2 =
         not (Env.is_functor_arg p2 env)
         && equal_module_paths env p1 subst p2
     | Mty_ident p1, Mty_ident p2 ->
-        equal_module_paths env p1 subst p2
+        equal_modtype_paths env p1 subst p2
     | Mty_with (mty1,ns1,mc1), Mty_with (mty2,ns2,mc2) ->
         shallow_equal_modtypes mty1 mty2
         && ns1 = ns2
@@ -770,7 +770,7 @@ and shortcut env subst mty1 mty2 =
         (
           Format.printf "@[<hv 2>couldn't match(s)@ %a@ with@ %a@]@."
             printm p1
-            printm (Subst.modtype_path subst p2)
+            printm (Subst.module_path subst p2)
         );
         better
       else
@@ -781,11 +781,12 @@ and shortcut env subst mty1 mty2 =
     match mc1, mc2 with
     | Modc_modtype p1, Modc_modtype p2 ->
         equal_modtype_paths env p1 subst p2
-    | Modc_module t1, Modc_module t2 ->
-        shallow_equal_transforms t1 t2
+    | Modc_module mty1, Modc_module mty2 ->
+        shallow_equal_modtypes mty1 mty2
     | Modc_type p1, Modc_type p2 ->
         equal_type_paths p1 p2
     | _, _ -> false
+  (*
   and shallow_equal_transforms t1 t2 =
     let open Nominal in
     let eq_mod_paths p1 p2 = if equal_module_paths env p1 subst p2
@@ -809,30 +810,31 @@ and shortcut env subst mty1 mty2 =
     | Mtt_replace mty1, Mtt_replace mty2 ->
         shallow_equal_modtypes mty1 mty2
     | _, _ -> false
+  *)
   in
   let shortcut_constraint c1 c2 =
     let open Nominal in
     match c1, c2 with
     | Modc_modtype p1, Modc_modtype p2 ->
         equal_modtype_paths env p1 subst p2
-    | Modc_module t1, Modc_module t2 ->
-        let ok = shallow_equal_transforms t1 t2
+    | Modc_module mty1, Modc_module mty2 ->
+        let ok = shallow_equal_modtypes mty1 mty2
         in
         if not ok && rl_debugging then (
           let printt ppf = function
-            | Mtt_replace (Mty_alias p) ->
+            | Mty_alias p ->
                 let md = Env.find_module p env
                 in
                 Format.fprintf ppf "module %a : %a"
                   Printtyp.path p
                   Printtyp.modtype md.md_type
-            | t -> Printtyp.modtype_transform ppf t
+            | mty -> Printtyp.modtype ppf mty
           in
           Format.printf "@[<hv 2>mismatch@ %a@ %a@]@."
             (* Printtyp.modtype_transform t1 
             Printtyp.modtype_transform t2 *)
-            printt t1
-            printt t2
+            printt mty1
+            printt mty2
         );
         ok
     | Modc_type p1, Modc_type p2 ->
@@ -854,6 +856,18 @@ and shortcut env subst mty1 mty2 =
     | _, [] -> true
     | _ -> shortcut_constraints cs1 cs2
   in
+  let rec shallow_incl_modtypes mty1 mty2 = match mty1, mty2 with
+  | _ when shallow_equal_modtypes mty1 mty2 -> true
+  | Mty_strengthen (mty1,_), mty2 -> shallow_equal_modtypes mty1 mty2
+  | Mty_with _, mty2 ->
+      let (mty1,cs1) = constraints [] mty1 in
+      let (mty2,cs2) = constraints [] mty2 in
+      shallow_incl_modtypes mty1 mty2
+      && shortcut_constraints' cs1 cs2
+  | _ -> false
+  in
+  shallow_incl_modtypes mty1 mty2
+  (*
   match constraints [] mty1, constraints [] mty2 with
   | (Mty_ident p1, cs1), (Mty_ident p2, cs2) ->
       equal_modtype_paths env p1 subst p2 && (*
@@ -867,6 +881,7 @@ and shortcut env subst mty1 mty2 =
       shallow_equal_modtypes mty1 mty2
       && equal_module_paths env p1 subst p2
   | _ -> false
+  *)
   *)
 
 (* Functor parameters *)
@@ -906,7 +921,8 @@ and functor_param ~in_eq ~loc env ~mark subst param1 param2 =
 and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
     subst mty1 path1 mty2 shape =
   if rl_debugging then (
-    Format.printf "@[<hv 2>strengthened_modtypes@ %a@ %a@]@."
+    Format.printf "@[<hv 2>strengthened_modtypes %a@ %a@ %a@]@."
+      Printtyp.path path1
       Printtyp.modtype mty1
       Printtyp.modtype mty2
   );

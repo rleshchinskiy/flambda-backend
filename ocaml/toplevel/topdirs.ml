@@ -594,7 +594,7 @@ let () =
                (if secretly_the_same_path env path new_path
                 then acc
                 else def :: acc)
-         | None | Some (Mty_alias _ | Mty_signature _ | Mty_functor _) ->
+         | None | Some (Mty_alias _ | Mty_signature _ | Mty_functor _ | Mty_strengthen _ | Mty_with _) ->
              List.rev (def :: acc)
        in
        accum_defs path mtd []

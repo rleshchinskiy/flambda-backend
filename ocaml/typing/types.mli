@@ -599,16 +599,11 @@ type visibility =
   | Hidden
 
 module Nominal : sig
-  type 'a modtype_transform =
-    | Mtt_strengthen of Path.t
-    | Mtt_replace of 'a
-
   type 'a module_constraint =
-    | Modc_module of 'a modtype_transform
+    | Modc_module of 'a
     | Modc_type of Path.t
     | Modc_modtype of Path.t
 
-  val map_transform : ('a -> 'b) -> 'a modtype_transform -> 'b modtype_transform
   val map_module_constraint : ('a -> 'b) -> 'a module_constraint -> 'b module_constraint
 end
 

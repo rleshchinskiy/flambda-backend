@@ -163,7 +163,6 @@ val signature: formatter -> signature -> unit
 val tree_of_modtype: module_type -> out_module_type
 val tree_of_modtype_declaration:
     Ident.t -> modtype_declaration -> out_sig_item
-val modtype_transform: formatter -> module_type Nominal.modtype_transform -> unit
 
 (** Print a list of functor parameters while adjusting the printing environment
     for each functor argument.

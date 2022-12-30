@@ -578,12 +578,7 @@ and force_module_constraint c = Nominal.map_module_constraint force_modtype c
 and subst_lazy_module_constraint scoping s =
   let open Types.Nominal in
   function
-    | Modc_module t ->
-        let t = match t with
-          | Mtt_strengthen p -> Mtt_strengthen (module_path s p)
-          | Mtt_replace mty -> Mtt_replace (subst_lazy_modtype scoping s mty)
-        in
-        Modc_module t
+    | Modc_module mty -> Modc_module (subst_lazy_modtype scoping s mty)
     | Modc_type p -> Modc_type (type_path s p)
     | Modc_modtype p -> Modc_modtype (modtype_path s p)
 

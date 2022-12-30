@@ -387,14 +387,9 @@ let type_iterators =
         it.it_module_type it mty;
         it.it_path p
     | Mty_with (mty, _, constr) ->
-        let open Nominal in
-        let it_transform = function
-          | Mtt_strengthen p -> it.it_path p
-          | Mtt_replace mty -> it.it_module_type it mty
-        in
         it.it_module_type it mty;
         match constr with
-          | Nominal.Modc_module t -> it_transform t
+          | Nominal.Modc_module mt -> it.it_module_type it mt
           | (Nominal.Modc_type p | Nominal.Modc_modtype p) -> it.it_path p
   
   and it_class_type it = function

@@ -330,21 +330,13 @@ type visibility =
   | Hidden
 
 module Nominal = struct
-  type 'a modtype_transform =
-    | Mtt_strengthen of Path.t
-    | Mtt_replace of 'a
-
   type 'a module_constraint =
-    | Modc_module of 'a modtype_transform
+    | Modc_module of 'a
     | Modc_type of Path.t
     | Modc_modtype of Path.t
 
-  let map_transform f = function
-    | Mtt_strengthen _ as t -> t
-    | Mtt_replace mty -> Mtt_replace (f mty)
-
   let map_module_constraint f = function
-    | Modc_module t -> Modc_module (map_transform f t)
+    | Modc_module t -> Modc_module (f t)
     | (Modc_type _ | Modc_modtype _) as x -> x
 end
 
