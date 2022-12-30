@@ -801,8 +801,8 @@ let check_functor_application =
        t -> unit)
 let strengthen =
   (* to be filled with Mtype.strengthen *)
-  ref ((fun ~aliasable:_ _env _mty _path -> assert false) :
-         aliasable:bool -> t -> Subst.Lazy.modtype ->
+  ref ((fun ?rescope:_ ~aliasable:_ _env _mty _path -> assert false) :
+         ?rescope:bool -> aliasable:bool -> t -> Subst.Lazy.modtype ->
          Path.t -> Subst.Lazy.modtype)
 
 let scrape_with_lazy =
@@ -1683,7 +1683,7 @@ let rec scrape_alias env ?path mty =
         mty
       end
   | MtyL_strengthen (mty,p), path ->
-      let mty = !strengthen ~aliasable:false env mty p in
+      let mty = !strengthen ~rescope:true ~aliasable:false env mty p in
       scrape_alias env ?path mty
   | mty, Some path ->
       let mty = !strengthen ~aliasable:true env mty path in

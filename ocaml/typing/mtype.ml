@@ -185,7 +185,7 @@ let rec scrape_lazy ?(rescope=false) env mty =
       end
   | MtyL_strengthen (mty,p) ->
       (* RL FIXME: rescope when strengthening? *)
-      let mty = strengthen_lazy ~aliasable:false env mty p in
+      let mty = strengthen_lazy ~rescope ~aliasable:false env mty p in
       scrape_lazy ~rescope env mty
   | MtyL_with (base, ns, mc) ->
       begin match apply_constraint ns mc env base with
@@ -196,9 +196,9 @@ let rec scrape_lazy ?(rescope=false) env mty =
       end
   | _ -> mty
 
-and strengthen_lazy ~aliasable env mty p =
+and strengthen_lazy ?(rescope=false) ~aliasable env mty p =
   let open Subst.Lazy in
-  match scrape_lazy env mty with
+  match scrape_lazy ~rescope env mty with
     MtyL_signature sg ->
       let items = force_signature_once sg in
       let defer mty item = match strengthen_sig_item ~aliasable p item with
@@ -213,7 +213,7 @@ and strengthen_lazy ~aliasable env mty p =
         add_sig_item env item, new_item
       in
       begin match mty with
-      | (MtyL_ident _| MtyL_with _) when rl_with ->
+      | (MtyL_ident _| MtyL_with _) when rl_with && false ->
         (* RL TODO: could simplify here *)
         let mty = List.filter (function
             | SigL_type (id, {type_kind = Type_abstract}, _, _) ->
@@ -234,16 +234,25 @@ and strengthen_lazy ~aliasable env mty p =
       end
   | MtyL_functor(Named (Some param, arg), res)
     when !Clflags.applicative_functors ->
+      (*
       let env =
         Env.add_module_lazy ~update_summary:false param Mp_present arg env
       in
       MtyL_functor(Named (Some param, arg),
-        strengthen_lazy ~aliasable:false env res (Papply(p, Pident param)))
+        strengthen_lazy ~rescope ~aliasable:false env res (Papply(p, Pident param)))
+      *)
+      MtyL_functor(Named (Some param, arg),
+        make_strengthen_lazy res (Papply(p, Pident param)))
   | MtyL_functor(Named (None, arg), res)
     when !Clflags.applicative_functors ->
       let param = Ident.create_scoped ~scope:(Path.scope p) "Arg" in
+      
       MtyL_functor(Named (Some param, arg),
-        strengthen_lazy ~aliasable:false env res (Papply(p, Pident param)))
+        make_strengthen_lazy res (Papply(p, Pident param)))
+      (*
+      MtyL_functor(Named (Some param, arg),
+        strengthen_lazy ~rescope ~aliasable:false env res (Papply(p, Pident param)))
+      *)
   | mty ->
       mty (* RL: FIXME what about constraints in Mty_with? *)
 
@@ -359,8 +368,8 @@ and apply_nested_constraint_to_sig_item ns mc env item =
   add_sig_item env item, new_item
 
 
-let strengthen ~aliasable env mty p =
-  let mty' = strengthen_lazy ~aliasable env (Subst.Lazy.of_modtype mty) p in
+let strengthen ?(rescope=false) ~aliasable env mty p =
+  let mty' = strengthen_lazy ~rescope ~aliasable env (Subst.Lazy.of_modtype mty) p in
   let mty'' = Subst.Lazy.force_modtype mty' in
   if rl_debugging then (
     Format.printf "@[<hv 1>strengthen %a@ %a@ %a@]@."
