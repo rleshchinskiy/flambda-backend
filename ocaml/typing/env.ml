@@ -805,6 +805,12 @@ let strengthen =
          ?rescope:bool -> aliasable:bool -> t -> Subst.Lazy.modtype ->
          Path.t -> Subst.Lazy.modtype)
 
+let scrape_lazy =
+  (* to be filled with Mtype.strengthen *)
+  ref ((fun ?rescope:_ _env _mty -> assert false) :
+          ?rescope:bool -> t -> Subst.Lazy.modtype ->
+          Subst.Lazy.modtype)
+        
 let scrape_with_lazy =
   (* to be filled with Mtype.expand_lazy_modtype_with *)
   ref ((fun _env _mty -> assert false) :
@@ -1667,14 +1673,8 @@ let find_shadowed_types path env =
 
 let rec scrape_alias env ?path mty =
   let open Subst.Lazy in
-  match !scrape_with_lazy env mty, path with
-    MtyL_ident p, _ ->
-      begin try
-        scrape_alias env (find_modtype_expansion_lazy p env) ?path
-      with Not_found ->
-        mty
-      end
-  | MtyL_alias path, _ ->
+  match !scrape_lazy env mty, path with
+    MtyL_alias path, _ ->
       begin try
         scrape_alias env ((find_module_lazy path env).mdl_type) ~path
       with Not_found ->
@@ -1682,12 +1682,10 @@ let rec scrape_alias env ?path mty =
           (Warnings.No_cmi_file (Path.name path));*)
         mty
       end
-  | MtyL_strengthen (mty,p), path ->
-      let mty = !strengthen ~rescope:true ~aliasable:false env mty p in
-      scrape_alias env ?path mty
   | mty, Some path ->
       let mty = !strengthen ~aliasable:true env mty path in
-      !scrape_with_lazy env mty
+      mty
+      (* !scrape_with_lazy env mty *)
   | mty, None ->
       mty
 

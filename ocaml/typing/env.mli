@@ -486,6 +486,9 @@ val strengthen:
     (?rescope:bool -> aliasable:bool -> t -> Subst.Lazy.modtype ->
      Path.t -> Subst.Lazy.modtype) ref
 (* Forward declaration to break mutual recursion with Mtype. *)
+val scrape_lazy:
+    (?rescope:bool -> t -> Subst.Lazy.modtype -> Subst.Lazy.modtype) ref
+(* Forward declaration to break mutual recursion with Mtype. *)
 val scrape_with_lazy:
     (t -> Subst.Lazy.modtype -> Subst.Lazy.modtype) ref
 (* Forward declaration to break mutual recursion with Mtype. *)

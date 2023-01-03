@@ -591,6 +591,7 @@ let scrape_with env mty =
   
 let () =
   Env.strengthen := strengthen_lazy ;
+  Env.scrape_lazy := scrape_lazy ;
   Env.scrape_with_lazy := scrape_with_lazy ;
   Env.scrape_with := scrape_with
 
