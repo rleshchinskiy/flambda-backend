@@ -412,27 +412,11 @@ let pair_components subst sig1_comps sig2 =
 
 
 let retrieve_functor_params env mty =
-  let rec retrieve_functor_params before env =
-    function
-    | Mty_ident p as res ->
-        begin match expand_modtype_path env p with
-        | Some mty -> retrieve_functor_params before env mty
-        | None -> List.rev before, res
-        end
-    | Mty_alias p as res ->
-        begin match expand_module_alias env p with
-        | Some mty ->  retrieve_functor_params before env mty
-        | None -> List.rev before, res
-        end
+  let rec retrieve_functor_params before env mty =
+    match Mtype.scrape_alias env mty with
     | Mty_functor (p, res) -> retrieve_functor_params (p :: before) env res
-    | Mty_signature _ as res -> List.rev before, res
-    | Mty_strengthen (mty,p) ->
-        retrieve_functor_params before env (Mtype.strengthen ~rescope:true ~aliasable:false env mty p)
-    | Mty_with _ as res ->
-        begin match Mtype.scrape_with env res with
-          Mty_with _ -> List.rev before, res
-        | mty -> retrieve_functor_params before env mty
-        end
+    | Mty_ident _ | Mty_alias _ | Mty_signature _ | Mty_strengthen _ | Mty_with _ as res ->
+        List.rev before, res
   in
   retrieve_functor_params [] env mty
 
