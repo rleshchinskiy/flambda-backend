@@ -532,12 +532,12 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
           end
     end
   | (Mty_strengthen (mty1,p1), _) ->
-    let mty1 = Mtype.strengthen ~rescope:true ~aliasable:false env mty1 p1 in
+    let mty1 = Mtype.expand_strengthen env mty1 p1 in
     try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
   | (_, Mty_strengthen(mty2,p2)) ->
     let p2 = Subst.module_path subst p2 in
     let mty2 = Subst.modtype Subst.Keep subst mty2 in
-    let mty2 = Mtype.strengthen ~rescope:true ~aliasable:false env mty2 p2 in
+    let mty2 = Mtype.expand_strengthen env mty2 p2 in
     try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
   (* Expand aliases before with: expanding with should never produce an alias
      but expanding an alias can produce with. *)
