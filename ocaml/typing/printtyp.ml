@@ -1900,6 +1900,19 @@ let with_hidden_items ids f =
 let add_sigitem env x =
   Env.add_signature (Signature_group.flatten x) env
 
+
+let strengthen =
+  (* to be filled with Mtype.strengthen *)
+  ref ((fun ?rescope:_ ~aliasable:_ _env _mty _path -> assert false) :
+         ?rescope:bool -> aliasable:bool -> Env.t -> Subst.Lazy.modtype ->
+         Path.t -> Subst.Lazy.modtype)
+
+
+let scrape_with =
+  (* to be filled with Mtype.expand_lazy_modtype_with *)
+  ref ((fun _env _mty -> assert false) :
+        Env.t -> module_type -> module_type)
+
 let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_ident p -> Omty_ident (tree_of_path Module_type p)
   | Mty_signature sg ->
@@ -1915,7 +1928,7 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       Omty_alias (tree_of_path Module p)
   | Mty_strengthen (mty,p) ->
     let expanded () = 
-      let mty = !Env.strengthen ~aliasable:false !printing_env (Subst.Lazy.of_modtype mty) p in
+      let mty = !strengthen ~aliasable:false !printing_env (Subst.Lazy.of_modtype mty) p in
       let mty = Subst.Lazy.force_modtype mty in
       tree_of_modtype ~ellipsis mty
     in
@@ -1935,7 +1948,7 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       let expanded = match rl_print_with with
         | Rlpw_with_only -> None
         | Rlpw_expand_only | Rlpw_both ->
-          begin match !Env.scrape_with !printing_env mty with
+          begin match !scrape_with !printing_env mty with
             Mty_with _ -> None
           | mty -> Some (tree_of_modtype ~ellipsis mty)
           end

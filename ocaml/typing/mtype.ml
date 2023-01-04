@@ -588,12 +588,31 @@ let scrape_with env mty =
     Mty_with _ ->
       Subst.Lazy.force_modtype (scrape_with_lazy env (Subst.Lazy.of_modtype mty))
   | _ -> mty
-  
+
+let rec scrape_alias_lazy env ?path mty =
+  let open Subst.Lazy in
+  match scrape_lazy env mty, path with
+    MtyL_alias path, _ ->
+      begin try
+        scrape_alias_lazy env ((Env.find_module_lazy path env).mdl_type) ~path
+      with Not_found ->
+        (*Location.prerr_warning Location.none
+          (Warnings.No_cmi_file (Path.name path));*)
+        mty
+      end
+  | mty, Some path ->
+      strengthen_lazy ~aliasable:true env mty path
+  | mty, None ->
+      mty
+
+(* Non-lazy version of scrape_alias *)
+let scrape_alias t mty =
+  mty |> Subst.Lazy.of_modtype |> scrape_alias_lazy t |> Subst.Lazy.force_modtype
+
 let () =
-  Env.strengthen := strengthen_lazy ;
-  Env.scrape_lazy := scrape_lazy ;
-  Env.scrape_with_lazy := scrape_with_lazy ;
-  Env.scrape_with := scrape_with
+  Printtyp.strengthen := strengthen_lazy ;
+  Printtyp.scrape_with := scrape_with ;
+  Env.scrape_alias := fun env mty -> scrape_alias_lazy env mty
 
 
 (* In nondep_supertype, env is only used for the type it assigns to id.
@@ -936,7 +955,7 @@ let rec remove_aliases_mty env args pres mty =
       Mty_signature sg ->
         Mp_present, Mty_signature (remove_aliases_sig env args' sg)
     | Mty_alias _ ->
-        let mty' = Env.scrape_alias env mty in
+        let mty' = scrape_alias env mty in
         if mty' = mty then begin
           pres, mty
         end else begin
@@ -1011,3 +1030,12 @@ let lower_nongen nglev mty =
   let it = {type_iterators with it_type_expr} in
   it.it_module_type it mty;
   it.it_module_type unmark_iterators mty
+
+
+let expand_module_path ~strengthen ~aliasable env path =
+  if strengthen then
+    let md = Env.find_module_lazy ~alias:true path env in
+    let mty = strengthen_lazy ~aliasable env md.mdl_type path in
+    Subst.Lazy.force_modtype mty
+  else
+    (Env.find_module path env).md_type

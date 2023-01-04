@@ -799,27 +799,10 @@ let check_functor_application =
        f0_path:Path.t -> args:(Path.t * Types.module_type) list ->
        arg_path:Path.t -> arg_mty:module_type -> param_mty:module_type ->
        t -> unit)
-let strengthen =
-  (* to be filled with Mtype.strengthen *)
-  ref ((fun ?rescope:_ ~aliasable:_ _env _mty _path -> assert false) :
-         ?rescope:bool -> aliasable:bool -> t -> Subst.Lazy.modtype ->
-         Path.t -> Subst.Lazy.modtype)
 
-let scrape_lazy =
-  (* to be filled with Mtype.strengthen *)
-  ref ((fun ?rescope:_ _env _mty -> assert false) :
-          ?rescope:bool -> t -> Subst.Lazy.modtype ->
-          Subst.Lazy.modtype)
-        
-let scrape_with_lazy =
-  (* to be filled with Mtype.expand_lazy_modtype_with *)
+let scrape_alias =
   ref ((fun _env _mty -> assert false) :
-        t -> Subst.Lazy.modtype -> Subst.Lazy.modtype)
-
-let scrape_with =
-  (* to be filled with Mtype.expand_lazy_modtype_with *)
-  ref ((fun _env _mty -> assert false) :
-        t -> module_type -> module_type)
+    t -> Subst.Lazy.modtype -> Subst.Lazy.modtype)
         
 let md md_type =
   {md_type; md_attributes=[]; md_loc=Location.none
@@ -1105,7 +1088,7 @@ and find_functor_components path env =
   | Functor_comps f -> f
   | Structure_comps _ -> raise Not_found
 
-let find_module ~alias path env =
+let find_module ?(alias=false) path env =
   match path with
   | Pident id ->
       let data = find_ident_module id env in
@@ -1119,7 +1102,7 @@ let find_module ~alias path env =
       if alias then md (fc.fcomp_res)
       else md (modtype_of_functor_appl fc p1 p2)
 
-let find_module_lazy ~alias path env =
+let find_module_lazy ?(alias=false) path env =
   match path with
   | Pident id ->
       let data = find_ident_module id env in
@@ -1136,10 +1119,12 @@ let find_module_lazy ~alias path env =
       in
       Subst.Lazy.of_module_decl md
 
+(*
 let find_strengthened_module ~aliasable path env =
   let md = find_module_lazy ~alias:true path env in
   let mty = !strengthen ~aliasable env md.mdl_type path in
   Subst.Lazy.force_modtype mty
+*)
 
 let find_value_full path env =
   match path with
@@ -1468,12 +1453,6 @@ and expand_modtype_path env path =
   | Some (MtyL_ident path) -> normalize_modtype_path env path
   | _ | exception Not_found -> path
 
-let find_module path env =
-  find_module ~alias:false path env
-
-let find_module_lazy path env =
-  find_module_lazy ~alias:false path env
-
 (* Find the manifest type associated to a type when appropriate:
    - the type should be public or should have a private row,
    - the type should have an associated manifest type. *)
@@ -1671,6 +1650,7 @@ let find_shadowed_types path env =
 
 (* Expand manifest module type names at the top of the given module type *)
 
+(*
 let rec scrape_alias env ?path mty =
   let open Subst.Lazy in
   match !scrape_lazy env mty, path with
@@ -1688,7 +1668,7 @@ let rec scrape_alias env ?path mty =
       (* !scrape_with_lazy env mty *)
   | mty, None ->
       mty
-
+*)
 
 (* Given a signature and a root path, prefix all idents in the signature
    by the root path and build the corresponding substitution. *)
@@ -1788,7 +1768,7 @@ let is_identchar c =
 let rec components_of_module_maker
           {cm_env; cm_prefixing_subst;
            cm_path; cm_addr; cm_mty; cm_shape} : _ result =
-  match scrape_alias cm_env cm_mty with
+  match !scrape_alias cm_env cm_mty with
     MtyL_signature sg ->
       let c =
         { comp_values = NameMap.empty;
@@ -2225,8 +2205,6 @@ and store_cltype id desc shape env =
     cltypes = IdTbl.add id cltda env.cltypes;
     summary = Env_cltype(env.summary, id, desc) }
 
-let scrape_alias env mty = scrape_alias env mty
-
 (* Compute the components of a functor application in a path. *)
 
 let components_of_functor_appl ~loc ~f_path ~f_comp ~arg env =
@@ -2343,8 +2321,10 @@ let add_local_type path info env =
     local_constraints = Path.Map.add path info env.local_constraints }
 
 (* Non-lazy version of scrape_alias *)
+(*
 let scrape_alias t mty =
   mty |> Subst.Lazy.of_modtype |> scrape_alias t |> Subst.Lazy.force_modtype
+*)
 
 (* Insertion of bindings by name *)
 

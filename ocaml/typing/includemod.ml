@@ -197,17 +197,27 @@ let class_declarations env subst decl1 decl2 =
 (* Expand a module type identifier when possible *)
 
 let expand_modtype_path env path =
-   match Env.find_modtype_expansion path env with
-     | exception Not_found -> None
-     | x -> Some x
+  match Env.find_modtype_expansion path env with
+   | exception Not_found -> None
+   | x -> Some x
 
-let expand_module_alias ~strengthen env path =
+let expand_module_alias env path =
+  match Env.find_module path env with
+   | exception Not_found -> None
+   | md -> Some md.md_type
+
+  (*
   match
     if strengthen then Env.find_strengthened_module ~aliasable:true path env
     else (Env.find_module path env).md_type
   with
+  | x -> Some x
+  | exception Not_found -> None
+  *)
+  (*
   | x -> Ok x
   | exception Not_found -> Error (Error.Unbound_module_path path)
+  *)
 
 (* Extract name, kind and ident from a signature item *)
 
@@ -410,9 +420,9 @@ let retrieve_functor_params env mty =
         | None -> List.rev before, res
         end
     | Mty_alias p as res ->
-        begin match expand_module_alias ~strengthen:false env p with
-        | Ok mty ->  retrieve_functor_params before env mty
-        | Error _ -> List.rev before, res
+        begin match expand_module_alias env p with
+        | Some mty ->  retrieve_functor_params before env mty
+        | None -> List.rev before, res
         end
     | Mty_functor (p, res) -> retrieve_functor_params (p :: before) env res
     | Mty_signature _ as res -> List.rev before, res
@@ -527,9 +537,9 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       | exception Env.Error (Env.Missing_module (_, _, path)) ->
           Error Error.(Mt_core(Unbound_module_path path))
       | p1 ->
-          begin match expand_module_alias ~strengthen:false env p1 with
-          | Error e -> Error (Error.Mt_core e)
-          | Ok mty1 ->
+          begin match expand_module_alias env p1 with
+          | None -> Error (Error.Mt_core (Error.Unbound_module_path p1))
+          | Some mty1 ->
               match strengthened_modtypes ~in_eq ~loc ~aliasable:true env ~mark
                       subst mty1 p1 mty2 orig_shape
               with
@@ -1532,10 +1542,9 @@ let strengthened_module_decl ~loc ~aliasable env ~mark md1 path1 md2 =
       raise (Error(env,Error.(In_Module_type mdiff)))
 
 let expand_module_alias ~strengthen env path =
-  match expand_module_alias ~strengthen env path with
-  | Ok x -> x
-  | Result.Error _ ->
-      raise (Error(env,In_Expansion(Error.Unbound_module_path path)))
+  try
+    Mtype.expand_module_path ~strengthen ~aliasable:true env path
+  with Not_found -> raise (Error(env,In_Expansion(Error.Unbound_module_path path)))
 
 let check_modtype_equiv ~loc env id mty1 mty2 =
   match check_modtype_equiv ~in_eq:false ~loc env ~mark:Mark_both mty1 mty2 with
