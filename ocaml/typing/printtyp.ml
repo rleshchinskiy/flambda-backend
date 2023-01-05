@@ -44,6 +44,8 @@ let rl_print_with =
   | Some "x" -> Rlpw_expand_only
   | _ -> Rlpw_both
 
+let rl_simple_abstract = Option.is_some (Sys.getenv_opt "RL_SIMPLE_ABSTRACT")
+
 (* Print a long identifier *)
 
 let rec longident ppf = function
@@ -1931,7 +1933,9 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       let mty = !strengthen ~aliasable:false !printing_env (Subst.Lazy.of_modtype mty) p in
       let mty = Subst.Lazy.force_modtype mty in
       match mty with
-        Mty_strengthen _ -> None
+      | Mty_strengthen (mty,_) when rl_simple_abstract ->
+          Some (tree_of_modtype ~ellipsis mty)
+      | Mty_strengthen _ -> None
       | _ -> Some (tree_of_modtype ~ellipsis mty)
     in
     begin match rl_print_with with
