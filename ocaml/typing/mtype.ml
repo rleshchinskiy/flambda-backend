@@ -74,6 +74,8 @@ let sig_item_id =
     -> id
 
 let rec make_strengthen_lazy mty p =
+  strengthen_scraped_once ~aliasable:false mty p
+  (*
   let open Subst.Lazy in
   match mty with
   | MtyL_alias _ | MtyL_strengthen _ -> mty
@@ -89,7 +91,7 @@ let rec make_strengthen_lazy mty p =
     end
   *)
   | MtyL_ident _ | MtyL_with _ -> MtyL_strengthen (mty,p)
-
+  *)
 (*
 and expand_strengthen_lazy env mty p =
   strengthen_once_lazy ~rescope:true ~aliasable:false env mty p
@@ -324,13 +326,16 @@ let make_strengthen mty p =
   make_strengthen_lazy (Subst.Lazy.of_modtype mty) p
   |> Subst.Lazy.force_modtype
 
-let strengthen ?(rescope=false) ~aliasable env mty p =
+let do_strengthen ~rescope ~aliasable env mty p =
   let mty' = strengthen_once_lazy ~rescope ~aliasable env (Subst.Lazy.of_modtype mty) p in
   let mty'' = Subst.Lazy.force_modtype mty' in
   mty''
 
 let expand_strengthen env mty p =
-  strengthen ~rescope:true ~aliasable:false env mty p
+  do_strengthen ~rescope:true ~aliasable:false env mty p
+
+let strengthen ~aliasable env mty p =
+  do_strengthen ~rescope:false ~aliasable env mty p
 
 let strengthen_decl ~aliasable md p =
   let md' = strengthen_lazy_decl ~aliasable

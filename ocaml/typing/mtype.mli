@@ -35,7 +35,7 @@ val freshen: scope:int -> module_type -> module_type
            where bound identifiers are fresh. *)
 val make_strengthen: module_type -> Path.t -> module_type
 val expand_strengthen: Env.t -> module_type -> Path.t -> module_type
-val strengthen: ?rescope:bool -> aliasable:bool -> Env.t -> module_type -> Path.t -> module_type
+val strengthen: aliasable:bool -> Env.t -> module_type -> Path.t -> module_type
         (* Strengthen abstract type components relative to the
            given path. *)
 val strengthen_decl:
