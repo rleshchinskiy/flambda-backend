@@ -110,7 +110,7 @@ and reduce_lazy env mty =
   | _ -> None
 *)
 
-and scrape_lazy ?(rescope=false) env mty =
+and scrape_lazy ?(rescope=false) ?(aliases=false) env mty =
   let open Subst.Lazy in
   match mty with
     MtyL_ident p ->
@@ -128,44 +128,23 @@ and scrape_lazy ?(rescope=false) env mty =
       with Not_found ->
         mty
       end
+  | MtyL_alias path when aliases ->
+        begin try
+          let mty = (Env.find_module_lazy path env).mdl_type in
+          let mty = strengthen_once_lazy ~aliasable:true env mty path in
+          scrape_lazy ~rescope ~aliases env mty
+        with Not_found ->
+          (*Location.prerr_warning Location.none
+            (Warnings.No_cmi_file (Path.name path));*)
+          mty
+        end
   | MtyL_strengthen (mty,p) ->
       strengthen_once_lazy ~rescope:true ~aliasable:false env mty p
   | MtyL_with (base, ns, mc) ->
       apply_constraint ns mc env base
-  | _ -> mty
-  (*
-  | MtyL_strengthen (mty,p) ->
-      let mty = strengthen_once_lazy ~rescope ~aliasable:false env mty p in
-      scrape_lazy ~rescope env mty
-  | MtyL_with (base, ns, mc) ->
-      begin match apply_constraint ns mc env base with
-        | MtyL_with _ as mty -> mty
-        | mty ->
-            (* RL FIXME: can we ever get an MtyL_ident here? *)
-            scrape_lazy ~rescope env mty
-      end
-  | _ -> mty
-  *)
+  | MtyL_signature _ | MtyL_functor _ | MtyL_alias _ -> mty
 
 and strengthen_once_lazy ?(rescope=false) ~aliasable env mty p =
-  (*
-  let open Subst.Lazy in
-  match scrape_lazy ~rescope env mty with
-    MtyL_signature sg ->
-      MtyL_signature(strengthen_lazy_sig ~aliasable sg p)
-
-  | MtyL_functor(Named (Some param, arg), res)
-    when !Clflags.applicative_functors ->
-      MtyL_functor(Named (Some param, arg),
-        make_strengthen_lazy res (Papply(p, Pident param)))
-  | MtyL_functor(Named (None, arg), res)
-    when !Clflags.applicative_functors ->
-      let param = Ident.create_scoped ~scope:(Path.scope p) "Arg" in
-      MtyL_functor(Named (Some param, arg),
-        make_strengthen_lazy res (Papply(p, Pident param)))
-  | mty ->
-      mty (* RL: FIXME what about constraints in Mty_with? *)
-  *)
   let mty = scrape_lazy ~rescope env mty in
   strengthen_scraped_once ~aliasable mty p
 
@@ -186,10 +165,6 @@ and strengthen_scraped_once ~aliasable mty p =
         make_strengthen_lazy res (Papply(p, Pident param)))
   | MtyL_alias _ | MtyL_functor _ | MtyL_strengthen _ -> mty
   | MtyL_ident _ | MtyL_with _ -> MtyL_strengthen (mty,p)
-  (*
-  | mty ->
-      mty (* RL: FIXME what about constraints in Mty_with? *)
-  *)
 
 and strengthen_lazy_sig' ~aliasable sg p =
   let open Subst.Lazy in
@@ -480,6 +455,30 @@ let scrape env mty =
   | _ -> mty
 *)
 
+let scrape_alias_lazy env mty =
+  scrape_lazy ~aliases:true env mty
+  (*
+  let open Subst.Lazy in
+  match scrape_lazy env mty with
+    MtyL_alias path ->
+      begin try
+        let mty = (Env.find_module_lazy path env).mdl_type in
+        let mty = strengthen_once_lazy ~aliasable:true env mty path in
+        scrape_alias_lazy env mty
+        (*
+        scrape_alias_lazy env ((Env.find_module_lazy path env).mdl_type) ~path *)
+      with Not_found ->
+        (*Location.prerr_warning Location.none
+          (Warnings.No_cmi_file (Path.name path));*)
+        mty
+      end
+  | mty -> mty
+  *)
+
+(* Non-lazy version of scrape_alias *)
+let scrape_alias t mty =
+  mty |> Subst.Lazy.of_modtype |> scrape_alias_lazy t |> Subst.Lazy.force_modtype
+
 let scrape_lazy env mty = scrape_lazy env mty
 
 let scrape env mty =
@@ -498,25 +497,7 @@ let scrape_with env mty =
       Subst.Lazy.force_modtype (scrape_with_lazy env (Subst.Lazy.of_modtype mty))
   | _ -> mty
 
-let rec scrape_alias_lazy env ?path mty =
-  let open Subst.Lazy in
-  match scrape_lazy env mty, path with
-    MtyL_alias path, _ ->
-      begin try
-        scrape_alias_lazy env ((Env.find_module_lazy path env).mdl_type) ~path
-      with Not_found ->
-        (*Location.prerr_warning Location.none
-          (Warnings.No_cmi_file (Path.name path));*)
-        mty
-      end
-  | mty, Some path ->
-      strengthen_scraped_once ~aliasable:true mty path
-  | mty, None ->
-      mty
 
-(* Non-lazy version of scrape_alias *)
-let scrape_alias t mty =
-  mty |> Subst.Lazy.of_modtype |> scrape_alias_lazy t |> Subst.Lazy.force_modtype
 
 let () =
   Printtyp.strengthen := strengthen_once_lazy ;
