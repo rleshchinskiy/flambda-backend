@@ -1245,7 +1245,8 @@ module PF :
       functor (X : sig type witness module type t module M : t end) -> X.t
     module M = F
   end
-module U : PF.t
+module U :
+  functor (X : sig type witness module type t module M : t end) -> X.t
 |}]
 
 module W = F(PF)(PF)(PF)(PF)(PF)(F)
