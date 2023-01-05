@@ -45,7 +45,7 @@ let freshen ~scope mty =
 
 let rec strengthen_lazy ~aliasable env mty p =
   let open Subst.Lazy in
-  match scrape_lazy env mty with
+  match mty with
     MtyL_signature sg ->
       let _, sg = strengthen_lazy_sig ~aliasable env sg p in
       MtyL_signature sg
@@ -62,15 +62,20 @@ let rec strengthen_lazy ~aliasable env mty p =
       MtyL_functor(Named (Some param, arg),
         strengthen_lazy ~aliasable:false env res (Papply(p, Pident param)))
   | MtyL_ident (q, nom) ->
-      begin match Nominal.equivalent_type nom with
+      (* FIXME *)
+      begin match !Env.expand_lazy_modtype_with env q nom with
       | Some (MtyL_signature sg) ->
-          let withs, sg = strengthen_lazy_sig ~aliasable env sg p in
-          begin match withs with
-          | Some cs -> MtyL_ident (q, Nominal.add nom cs (fun _ -> MtyL_signature sg))
-          | None -> MtyL_signature sg
-          end
-      | Some _ -> assert false
-      | None -> mty
+        let withs, sg = strengthen_lazy_sig ~aliasable env sg p in
+        begin match withs with
+        | Some cs -> MtyL_ident (q, Nominal.add nom cs
+            (function
+              | Some mty -> strengthen_lazy ~aliasable env mty p
+              | None -> MtyL_signature sg
+            ))
+        | None -> MtyL_signature sg
+        end
+      | Some mty -> strengthen_lazy ~aliasable env mty p
+      | None -> mty (* RL: FIXME what about constraints? *)
       end
   | mty ->
       mty
@@ -293,10 +298,11 @@ let rec constrain_modtype env constr mty =
 
 and constrain_signature env constr sg =
   Subst.Lazy.force_signature_once sg
-  |> List.map (constrain_sig_item env constr)
+  |> List.fold_left_map (constrain_sig_item constr) env
+  |> snd
   |> Subst.Lazy.of_signature_items
 
-and constrain_sig_item env constr item =
+and constrain_sig_item constr env item =
   let open Subst.Lazy in
   match constr, item with
   | ([s], Nominal.Nmc_strengthen (p, aliasable)), SigL_module(id, pres, md, rs, vis)
@@ -304,12 +310,14 @@ and constrain_sig_item env constr item =
     let str =
         strengthen_lazy_decl ~aliasable env md p
     in
+    let env =
+      Env.add_module_declaration_lazy ~update_summary:false id pres md env in
     if rl_debugging then (
       Format.printf "@[<hv 2>constrain(s)@ %a@ %a@]@."
         Printtyp.modtype (force_modtype md.mdl_type)
         Printtyp.modtype (force_modtype str.mdl_type)
     );
-    SigL_module (id, pres, str, rs, vis)
+    env, SigL_module (id, pres, str, rs, vis)
 
   | ([s], Nominal.Nmc_module p), SigL_module(id, pres, md, rs, vis) when Ident.name id = s ->
     let open Nominal in
@@ -375,7 +383,12 @@ and constrain_sig_item env constr item =
     in
     let rec compute = function
       | Nmty_of p ->
-          let md = Env.find_module_lazy p env in
+          let md =
+            try Env.find_module_lazy p env
+            with Not_found ->
+              Format.printf "not found %a@." Printtyp.path p;
+              raise Not_found
+          in
           let _, mty = scrape_for_lazy_type_of env Mp_present md.mdl_type in
           let md = { md with mdl_type = mty } in
           let str =
@@ -414,12 +427,14 @@ and constrain_sig_item env constr item =
     in
     *)
     let str = compute p in
+    let env =
+      Env.add_module_declaration_lazy ~update_summary:false id pres md env in
     if rl_debugging then (
       Format.printf "@[<hv 2>constrain@ %a@ %a@]@."
         Printtyp.modtype (force_modtype md.mdl_type)
         Printtyp.modtype (force_modtype str.mdl_type)
     );
-    SigL_module (id, pres, str, rs, vis)
+    env, SigL_module (id, pres, str, rs, vis)
 
 (*
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
@@ -471,7 +486,7 @@ and constrain_sig_item env constr item =
           else
             { decl with type_manifest = manif }
       in
-      SigL_type(id, decl, rs, vis)
+      env, SigL_type(id, decl, rs, vis)
       (*
       | SigL_type(id, decl, rs, vis) ->
         let (newdecl, newwiths) =
@@ -493,10 +508,18 @@ and constrain_sig_item env constr item =
         ((env, newwiths), Some (SigL_type(id, newdecl, rs, vis)))
       *)
     | (s :: ns, c), SigL_module(id, pres, md, rs, vis) when Ident.name id = s ->
+      (* RL FIXME: add to env *)
       let md = { md with mdl_type = constrain_modtype env (ns,c) md.mdl_type } in
-      SigL_module(id, pres, md, rs, vis)
+      let env =
+        Env.add_module_declaration_lazy ~update_summary:false id pres md env in
+      env, SigL_module(id, pres, md, rs, vis)
 
-    | _, sigelt -> sigelt
+    | _, SigL_module (id, pres, md, rs, vis) -> 
+      let env =
+        Env.add_module_declaration_lazy ~update_summary:false id pres md env in
+      env, SigL_module(id, pres, md, rs, vis)
+
+    | _, sigelt -> env, sigelt
 
 and expand_lazy_modtype_with env p nom =
   let expand () =
