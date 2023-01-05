@@ -707,7 +707,7 @@ let merge_constraint initial_env loc sg lid constr =
         let mty = md'.md_type in
         let mty = Mtype.scrape_for_type_of ~remove_aliases sig_env mty in
         let md'' = { md' with md_type = mty } in
-        let newmd = Mtype.strengthen_decl ~aliasable:false sig_env md'' path in
+        let newmd = Mtype.strengthen_decl ~aliasable:false md'' path in
         let coercion = Includemod.modtypes  ~mark:Mark_both ~loc sig_env
                  newmd.md_type md.md_type
         in
@@ -771,7 +771,7 @@ let merge_constraint initial_env loc sg lid constr =
                   Some wm.md.md_type
             in
             Option.map (fun mty ->
-              (namelist, Nominal.Modc_module (Mtype.make_strengthen env mty wm.path))) mty
+              (namelist, Nominal.Modc_module (Mtype.make_strengthen mty wm.path))) mty
         | _, _ -> None
         in
         x, nom, sg
@@ -2090,12 +2090,11 @@ let check_recmodule_inclusion env bindings =
      recursive definitions being accepted.  A good choice appears to be
      the number of mutually recursive declarations. *)
 
-  let subst_and_strengthen env scope s id mty =
+  let subst_and_strengthen scope s id mty =
     let mty = Subst.modtype (Rescope scope) s mty in
     match id with
     | None -> mty
-    | Some id -> Mtype.make_strengthen env mty
-          (Subst.module_path s (Pident id))
+    | Some id -> Mtype.make_strengthen mty (Subst.module_path s (Pident id))
   in
 
   let rec check_incl first_time n env s =
@@ -2123,7 +2122,7 @@ let check_recmodule_inclusion env bindings =
                let mty_actual' =
                  if first_time
                  then mty_actual
-                 else subst_and_strengthen env scope s (Some id) mty_actual
+                 else subst_and_strengthen scope s (Some id) mty_actual
                in
                Env.add_module ~arg:false ~shape id' Mp_present mty_actual' env)
           env bindings1 in
@@ -2143,7 +2142,7 @@ let check_recmodule_inclusion env bindings =
       let check_inclusion
             (id, name, mty_decl, modl, mty_actual, attrs, loc, shape, uid) =
         let mty_decl' = Subst.modtype (Rescope scope) s mty_decl.mty_type
-        and mty_actual' = subst_and_strengthen env scope s id mty_actual in
+        and mty_actual' = subst_and_strengthen scope s id mty_actual in
         let coercion, shape =
           try
             Includemod.modtypes_with_shape ~shape

@@ -1930,14 +1930,20 @@ let rec tree_of_modtype ?(ellipsis=false) = function
     let expanded () = 
       let mty = !strengthen ~aliasable:false !printing_env (Subst.Lazy.of_modtype mty) p in
       let mty = Subst.Lazy.force_modtype mty in
-      tree_of_modtype ~ellipsis mty
+      match mty with
+        Mty_strengthen _ -> None
+      | _ -> Some (tree_of_modtype ~ellipsis mty)
     in
     begin match rl_print_with with
-    | Rlpw_expand_only -> expanded ()
+    | Rlpw_expand_only ->
+        begin match expanded () with
+        | Some t -> t
+        | None -> Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, None)
+        end
     | Rlpw_with_only ->
         Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, None)
     | Rlpw_both ->
-        Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, Some (expanded ()))
+        Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, expanded ())
     end
   | Mty_with (_,_,_) as mty ->
       let rec collect cs = function

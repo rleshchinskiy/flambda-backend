@@ -73,12 +73,13 @@ let sig_item_id =
   | SigL_class_type (id, _, _, _)
     -> id
 
-let rec make_strengthen_lazy env mty p =
+let rec make_strengthen_lazy mty p =
   let open Subst.Lazy in
   match mty with
   | MtyL_alias _ | MtyL_strengthen _ -> mty
   | MtyL_signature _ | MtyL_functor _->
-      strengthen_once_lazy ~rescope:false ~aliasable:false env mty p
+      strengthen_scraped_once ~aliasable:false mty p
+  (*
   | MtyL_ident q ->
     begin match Env.find_modtype_expansion_lazy q env with
     | MtyL_ident _ as mty -> make_strengthen_lazy env mty p
@@ -86,13 +87,15 @@ let rec make_strengthen_lazy env mty p =
     | _  -> MtyL_strengthen (mty,p)
     | exception Not_found -> MtyL_ident q
     end
-  | _ -> MtyL_strengthen (mty,p)
+  *)
+  | MtyL_ident _ | MtyL_with _ -> MtyL_strengthen (mty,p)
 
 (*
 and expand_strengthen_lazy env mty p =
   strengthen_once_lazy ~rescope:true ~aliasable:false env mty p
 *)
 
+(*
 and reduce_lazy env mty =
   let open Subst.Lazy in
   match mty with
@@ -105,6 +108,7 @@ and reduce_lazy env mty =
       | mty -> Some mty
       end
   | _ -> None
+*)
 
 and scrape_lazy ?(rescope=false) env mty =
   let open Subst.Lazy in
@@ -124,11 +128,11 @@ and scrape_lazy ?(rescope=false) env mty =
       with Not_found ->
         mty
       end
-  | _ ->
-    begin match reduce_lazy env mty with
-    | Some mty -> scrape_lazy ~rescope env mty
-    | None -> mty
-    end
+  | MtyL_strengthen (mty,p) ->
+      strengthen_once_lazy ~rescope:true ~aliasable:false env mty p
+  | MtyL_with (base, ns, mc) ->
+      apply_constraint ns mc env base
+  | _ -> mty
   (*
   | MtyL_strengthen (mty,p) ->
       let mty = strengthen_once_lazy ~rescope ~aliasable:false env mty p in
@@ -144,35 +148,58 @@ and scrape_lazy ?(rescope=false) env mty =
   *)
 
 and strengthen_once_lazy ?(rescope=false) ~aliasable env mty p =
+  (*
   let open Subst.Lazy in
   match scrape_lazy ~rescope env mty with
     MtyL_signature sg ->
-      MtyL_signature(strengthen_lazy_sig ~aliasable env sg p)
+      MtyL_signature(strengthen_lazy_sig ~aliasable sg p)
 
   | MtyL_functor(Named (Some param, arg), res)
     when !Clflags.applicative_functors ->
-      let env =
-        Env.add_module_lazy ~update_summary:false param Mp_present arg env
-      in
       MtyL_functor(Named (Some param, arg),
-        make_strengthen_lazy env res (Papply(p, Pident param)))
+        make_strengthen_lazy res (Papply(p, Pident param)))
   | MtyL_functor(Named (None, arg), res)
     when !Clflags.applicative_functors ->
       let param = Ident.create_scoped ~scope:(Path.scope p) "Arg" in
       MtyL_functor(Named (Some param, arg),
-        make_strengthen_lazy env res (Papply(p, Pident param)))
+        make_strengthen_lazy res (Papply(p, Pident param)))
   | mty ->
       mty (* RL: FIXME what about constraints in Mty_with? *)
+  *)
+  let mty = scrape_lazy ~rescope env mty in
+  strengthen_scraped_once ~aliasable mty p
 
-and strengthen_lazy_sig' ~aliasable env sg p =
+and strengthen_scraped_once ~aliasable mty p =
+  let open Subst.Lazy in
+  match mty with
+  | MtyL_signature sg ->
+      MtyL_signature(strengthen_lazy_sig ~aliasable sg p)
+
+  | MtyL_functor(Named (Some param, arg), res)
+    when !Clflags.applicative_functors ->
+      MtyL_functor(Named (Some param, arg),
+        make_strengthen_lazy res (Papply(p, Pident param)))
+  | MtyL_functor(Named (None, arg), res)
+    when !Clflags.applicative_functors ->
+      let param = Ident.create_scoped ~scope:(Path.scope p) "Arg" in
+      MtyL_functor(Named (Some param, arg),
+        make_strengthen_lazy res (Papply(p, Pident param)))
+  | MtyL_alias _ | MtyL_functor _ | MtyL_strengthen _ -> mty
+  | MtyL_ident _ | MtyL_with _ -> MtyL_strengthen (mty,p)
+  (*
+  | mty ->
+      mty (* RL: FIXME what about constraints in Mty_with? *)
+  *)
+
+and strengthen_lazy_sig' ~aliasable sg p =
   let open Subst.Lazy in
   match sg with
     [] -> []
   | (SigL_value(_, _, _) as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
+      sigelt :: strengthen_lazy_sig' ~aliasable rem p
   | SigL_type(id, {type_kind=Type_abstract}, _, _) :: rem
     when Btype.is_row_name (Ident.name id) ->
-      strengthen_lazy_sig' ~aliasable env rem p
+      strengthen_lazy_sig' ~aliasable rem p
   | SigL_type(id, decl, rs, vis) :: rem ->
       let newdecl =
         match decl.type_manifest, decl.type_private, decl.type_kind with
@@ -188,17 +215,15 @@ and strengthen_lazy_sig' ~aliasable env sg p =
               { decl with type_manifest = manif }
       in
       SigL_type(id, newdecl, rs, vis) ::
-        strengthen_lazy_sig' ~aliasable env rem p
+        strengthen_lazy_sig' ~aliasable rem p
   | (SigL_typext _ as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
+      sigelt :: strengthen_lazy_sig' ~aliasable rem p
   | SigL_module(id, pres, md, rs, vis) :: rem ->
       let str =
-        strengthen_lazy_decl ~aliasable env md (Pdot(p, Ident.name id))
+        strengthen_lazy_decl ~aliasable md (Pdot(p, Ident.name id))
       in
-      let env =
-        Env.add_module_declaration_lazy ~update_summary:false id pres md env in
       SigL_module(id, pres, str, rs, vis)
-      :: strengthen_lazy_sig' ~aliasable env rem p
+      :: strengthen_lazy_sig' ~aliasable rem p
       (* Need to add the module in case it defines manifest module types *)
   | SigL_modtype(id, decl, vis) :: rem ->
       let newdecl =
@@ -210,26 +235,25 @@ and strengthen_lazy_sig' ~aliasable env sg p =
         | _ ->
             {decl with mtdl_type = Some(MtyL_ident(Pdot(p,Ident.name id)))}
       in
-      let env = Env.add_modtype_lazy ~update_summary:false id decl env in
       SigL_modtype(id, newdecl, vis) ::
-      strengthen_lazy_sig' ~aliasable env rem p
+      strengthen_lazy_sig' ~aliasable rem p
       (* Need to add the module type in case it is manifest *)
   | (SigL_class _ as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
+      sigelt :: strengthen_lazy_sig' ~aliasable rem p
   | (SigL_class_type _ as sigelt) :: rem ->
-      sigelt :: strengthen_lazy_sig' ~aliasable env rem p
+      sigelt :: strengthen_lazy_sig' ~aliasable rem p
 
-and strengthen_lazy_sig ~aliasable env sg p =
+and strengthen_lazy_sig ~aliasable sg p =
   let sg = Subst.Lazy.force_signature_once sg in
-  let sg = strengthen_lazy_sig' ~aliasable env sg p in
+  let sg = strengthen_lazy_sig' ~aliasable sg p in
   Subst.Lazy.of_signature_items sg
 
-and strengthen_lazy_decl ~aliasable env md p =
+and strengthen_lazy_decl ~aliasable md p =
   let open Subst.Lazy in
   let md' = match md.mdl_type with
   | MtyL_alias _ -> md
   | _ when aliasable -> {md with mdl_type = MtyL_alias p}
-  | mty -> {md with mdl_type = make_strengthen_lazy env mty p}
+  | mty -> {md with mdl_type = make_strengthen_lazy mty p}
   in
   (*
   if rl_debugging then (
@@ -258,15 +282,7 @@ and apply_constraint ns mc env mty =
       (* RL FIXME *)
       assert false
   | MtyL_alias p -> MtyL_alias p
-      (*
-      let p = Env.normalize_module_path (Some Location.none) env p in
-      let mty = (Env.find_module_lazy p env).mdl_type in
-      apply_constraint ns mc env mty (* (rescope mty) *) (* RL FIXME: was not doing this before a bug *)
-      *)
-  | MtyL_strengthen (mty,p) ->
-      let mty = strengthen_once_lazy ~aliasable:false env mty p in
-      apply_constraint ns mc env mty
-  | (MtyL_ident _ | MtyL_with _) as mty -> MtyL_with (mty,ns,mc)
+  | MtyL_strengthen _ | MtyL_ident _ | MtyL_with _ as mty -> MtyL_with (mty,ns,mc)
 
 and apply_constraint_to_sig_item mc item =
   let open Subst.Lazy in
@@ -329,8 +345,8 @@ and apply_nested_constraint_to_sig_item ns mc env item =
   in
   add_sig_item env item, new_item
 
-let make_strengthen env mty p =
-  make_strengthen_lazy env (Subst.Lazy.of_modtype mty) p
+let make_strengthen mty p =
+  make_strengthen_lazy (Subst.Lazy.of_modtype mty) p
   |> Subst.Lazy.force_modtype
 
 let strengthen ?(rescope=false) ~aliasable env mty p =
@@ -341,8 +357,8 @@ let strengthen ?(rescope=false) ~aliasable env mty p =
 let expand_strengthen env mty p =
   strengthen ~rescope:true ~aliasable:false env mty p
 
-let strengthen_decl ~aliasable env md p =
-  let md' = strengthen_lazy_decl ~aliasable env
+let strengthen_decl ~aliasable md p =
+  let md' = strengthen_lazy_decl ~aliasable
               (Subst.Lazy.of_module_decl md) p in
   let md'' = Subst.Lazy.force_module_decl md' in
   (*
@@ -464,6 +480,8 @@ let scrape env mty =
   | _ -> mty
 *)
 
+let scrape_lazy env mty = scrape_lazy env mty
+
 let scrape env mty =
   match mty with
     Mty_ident _ | Mty_strengthen _ | Mty_with _ ->
@@ -492,7 +510,7 @@ let rec scrape_alias_lazy env ?path mty =
         mty
       end
   | mty, Some path ->
-      strengthen_once_lazy ~aliasable:true env mty path
+      strengthen_scraped_once ~aliasable:true mty path
   | mty, None ->
       mty
 
@@ -556,8 +574,12 @@ let rec nondep_mty_with_presence env va ids pres mty =
       in
       pres, mty
   | Mty_strengthen (mty,p) ->
-    let mty = expand_strengthen env mty p in
-    nondep_mty_with_presence env va ids pres mty
+    begin match expand_strengthen env mty p with
+    | Mty_strengthen (mty,_) -> 
+        (* RL FIXME *)
+        nondep_mty_with_presence env va ids pres mty
+    | mty -> nondep_mty_with_presence env va ids pres mty
+    end
   | Mty_with _ -> assert false (* RL FIXME: What should we do here? *)
   
 and nondep_mty env va ids mty =
@@ -640,8 +662,10 @@ let rec enrich_modtype env p mty =
     Mty_signature sg ->
       Mty_signature(List.map (enrich_item env p) sg)
   | Mty_strengthen (mty,p1) ->
-      let mty = expand_strengthen env mty p1 in
-      enrich_modtype env p mty
+      begin match expand_strengthen env mty p1 with
+        Mty_signature _ as mty -> enrich_modtype env p mty
+      | _ -> Mty_strengthen (mty,p1)
+      end
   | _ ->
       mty
 
