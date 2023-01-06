@@ -23,6 +23,8 @@ val scrape: Env.t -> module_type -> module_type
            or abstract module type ident. *)
 val scrape_lazy: Env.t -> Subst.Lazy.modtype -> Subst.Lazy.modtype
 val scrape_alias: Env.t -> module_type -> module_type
+val reduce_lazy: Env.t -> Subst.Lazy.modtype -> Subst.Lazy.modtype option
+val reduce: Env.t -> module_type -> module_type option
 val scrape_with_lazy: Env.t -> Subst.Lazy.modtype -> Subst.Lazy.modtype
 val scrape_with: Env.t -> module_type -> module_type
 val scrape_for_functor_arg: Env.t -> module_type -> module_type

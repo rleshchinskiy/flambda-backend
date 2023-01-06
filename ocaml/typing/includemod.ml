@@ -196,10 +196,12 @@ let class_declarations env subst decl1 decl2 =
 
 (* Expand a module type identifier when possible *)
 
+(*
 let expand_modtype_path env path =
   match Env.find_modtype_expansion path env with
    | exception Not_found -> None
    | x -> Some x
+*)
 
 let expand_module_alias env path =
   match Env.find_module path env with
@@ -514,28 +516,63 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       );
       Ok (Tcoerce_none, orig_shape)
   *)
-  | (Mty_strengthen (mty1, p1, aliasable), _) ->
-    begin match Mtype.expand_strengthen ~aliasable env mty1 p1 (* Mtype.scrape env mty1 *) with
-      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+  | (Mty_signature sig1, Mty_signature sig2) ->
+    begin match
+      signatures ~in_eq ~loc env ~mark subst sig1 sig2 orig_shape
+    with
+    | Ok _ as ok -> ok
+    | Error e -> Error (Error.Signature e)
     end
-  | (_, Mty_strengthen _) ->
-    let mty2 = Subst.Lazy.of_modtype mty2
-          |> Subst.Lazy.modtype Keep subst
+  | Mty_functor (param1, res1), Mty_functor (param2, res2) ->
+    let cc_arg, env, subst =
+      functor_param ~in_eq ~loc env ~mark:(negate_mark mark)
+        subst param1 param2
     in
-    begin match Mtype.scrape_lazy env mty2 with
-      Subst.Lazy.MtyL_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty2 ->
-        try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
+    let var, res_shape =
+      match Shape.decompose_abs orig_shape with
+      | Some (var, res_shape) -> var, res_shape
+      | None ->
+          (* Using a fresh variable with a placeholder uid here is fine: users
+             will never try to jump to the definition of that variable.
+             If they try to jump to the parameter from inside the functor,
+             they will use the variable shape that is stored in the local
+             environment.  *)
+          let var, shape_var =
+            Shape.fresh_var Uid.internal_not_actually_unique
+          in
+          var, Shape.app orig_shape ~arg:shape_var
+    in
+    let cc_res = modtypes ~in_eq ~loc env ~mark subst res1 res2 res_shape in
+    begin match cc_arg, cc_res with
+    | Ok Tcoerce_none, Ok (Tcoerce_none, final_res_shape) ->
+        let final_shape =
+          if final_res_shape == res_shape
+          then orig_shape
+          else Shape.abs var final_res_shape
+        in
+        Ok (Tcoerce_none, final_shape)
+    | Ok cc_arg, Ok (cc_res, final_res_shape) ->
+        let final_shape =
+          if final_res_shape == res_shape
+          then orig_shape
+          else Shape.abs var final_res_shape
+        in
+        Ok (Tcoerce_functor(cc_arg, cc_res), final_shape)
+    | _, Error {Error.symptom = Error.Functor Error.Params res; _} ->
+        let got_params, got_res = res.got in
+        let expected_params, expected_res = res.expected in
+        let d = Error.sdiff
+            (param1::got_params, got_res)
+            (param2::expected_params, expected_res) in
+        Error Error.(Functor (Params d))
+    | Error _, _ ->
+        let params1, res1 = retrieve_functor_params env res1 in
+        let params2, res2 = retrieve_functor_params env res2 in
+        let d = Error.sdiff (param1::params1, res1) (param2::params2, res2) in
+        Error Error.(Functor (Params d))
+    | Ok _, Error res ->
+        Error Error.(Functor (Result res))
     end
-    (* 
-    let p2 = Subst.module_path subst p2 in
-    let mty2 = Subst.modtype Subst.Keep subst mty2 in
-    begin match Mtype.expand_strengthen env mty2 p2 with
-      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-    end
-    *)
 
   | (Mty_alias p1, Mty_alias p2) ->
       if Env.is_functor_arg p2 env then
@@ -543,6 +580,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       else if not (equal_module_paths env p1 subst p2) then
           Error Error.(Mt_core Incompatible_aliases)
       else Ok (Tcoerce_none, orig_shape)
+
   | (Mty_alias p1, _) -> begin
       match
         Env.normalize_module_path (Some Location.none) env p1
@@ -560,6 +598,23 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
               | Error reason -> Error (Error.After_alias_expansion reason)
           end
     end
+  
+  (*
+  | (Mty_strengthen _, _) ->
+    begin match (* Mtype.expand_strengthen ~aliasable env mty1 p1 *) Mtype.scrape env mty1 with
+      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
+    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+    end
+  | (_, Mty_strengthen _) ->
+    let mty2 = Subst.Lazy.of_modtype mty2
+          |> Subst.Lazy.modtype Keep subst
+    in
+    begin match Mtype.scrape_lazy env mty2 with
+      Subst.Lazy.MtyL_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
+    | mty2 ->
+        try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
+    end
+
   (* Expand aliases before with: expanding with should never produce an alias
      but expanding an alias can produce with. *)
   | (Mty_with _, _) ->
@@ -575,6 +630,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       MtyL_with _ -> Error (Error.Mt_core Abstract_module_type)
     | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
     end
+  (*
   | (Mty_ident p1, Mty_ident p2) ->
       let p1 = Env.normalize_modtype_path env p1 in
       let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
@@ -585,6 +641,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
             try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
         | None, _  | _, None -> Error (Error.Mt_core Abstract_module_type)
         end
+  *)
   | (Mty_ident p1, _) ->
       let p1 = Env.normalize_modtype_path env p1 in
       begin match expand_modtype_path env p1 with
@@ -605,63 +662,64 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
           | _ -> Error Error.(Mt_core Not_an_identifier)
           end
       end
-  | (Mty_signature sig1, Mty_signature sig2) ->
-      begin match
-        signatures ~in_eq ~loc env ~mark subst sig1 sig2 orig_shape
-      with
-      | Ok _ as ok -> ok
-      | Error e -> Error (Error.Signature e)
-      end
-  | Mty_functor (param1, res1), Mty_functor (param2, res2) ->
-      let cc_arg, env, subst =
-        functor_param ~in_eq ~loc env ~mark:(negate_mark mark)
-          subst param1 param2
-      in
-      let var, res_shape =
-        match Shape.decompose_abs orig_shape with
-        | Some (var, res_shape) -> var, res_shape
-        | None ->
-            (* Using a fresh variable with a placeholder uid here is fine: users
-               will never try to jump to the definition of that variable.
-               If they try to jump to the parameter from inside the functor,
-               they will use the variable shape that is stored in the local
-               environment.  *)
-            let var, shape_var =
-              Shape.fresh_var Uid.internal_not_actually_unique
-            in
-            var, Shape.app orig_shape ~arg:shape_var
-      in
-      let cc_res = modtypes ~in_eq ~loc env ~mark subst res1 res2 res_shape in
-      begin match cc_arg, cc_res with
-      | Ok Tcoerce_none, Ok (Tcoerce_none, final_res_shape) ->
-          let final_shape =
-            if final_res_shape == res_shape
-            then orig_shape
-            else Shape.abs var final_res_shape
-          in
-          Ok (Tcoerce_none, final_shape)
-      | Ok cc_arg, Ok (cc_res, final_res_shape) ->
-          let final_shape =
-            if final_res_shape == res_shape
-            then orig_shape
-            else Shape.abs var final_res_shape
-          in
-          Ok (Tcoerce_functor(cc_arg, cc_res), final_shape)
-      | _, Error {Error.symptom = Error.Functor Error.Params res; _} ->
-          let got_params, got_res = res.got in
-          let expected_params, expected_res = res.expected in
-          let d = Error.sdiff
-              (param1::got_params, got_res)
-              (param2::expected_params, expected_res) in
+  *)
+
+  | _ ->
+    (*
+    let rec same orig now = match orig, now with
+      | Mty_ident p1, Mty_ident p2 -> p1 = p2
+      | Mty_alias p1, Mty_alias p2 -> p1 = p2
+      | Mty_strengthen (orig,p1,_), Mty_strengthen (now,p2,_) ->
+          p1 = p2 && same orig now
+      | Mty_with (orig,_,_), Mty_with (now,_,_) ->
+          same orig now
+      | Mty_signature _, Mty_signature _ -> true
+      | Mty_functor _, Mty_functor _ -> true
+      | _, _ -> false
+    in
+    *)
+    let mismatch mty1 mty2 = match mty1, mty2 with
+      | (Mty_ident _ | Mty_strengthen _| Mty_with _), _ ->
+          Error (Error.Mt_core Abstract_module_type)
+      | Mty_functor _, _
+      | _, Mty_functor _ ->
+          let params1 = retrieve_functor_params env mty1 in
+          let params2 = retrieve_functor_params env mty2 in
+          let d = Error.sdiff params1 params2 in
           Error Error.(Functor (Params d))
-      | Error _, _ ->
-          let params1, res1 = retrieve_functor_params env res1 in
-          let params2, res2 = retrieve_functor_params env res2 in
-          let d = Error.sdiff (param1::params1, res1) (param2::params2, res2) in
-          Error Error.(Functor (Params d))
-      | Ok _, Error res ->
-          Error Error.(Functor (Result res))
-      end
+      | _, (Mty_ident _ | Mty_strengthen _ | Mty_with _) -> Error Error.(Mt_core Not_an_identifier)
+      | _, Mty_alias _ ->
+          Error (Error.Mt_core Error.Not_an_alias)
+      | _, _ -> Error (Error.Mt_core Abstract_module_type)
+    in
+    (*
+    let mty1_whnf = Mtype.scrape env mty1 in
+    let mty2_whnf =
+          Subst.Lazy.of_modtype mty2
+          |> Subst.Lazy.modtype Keep subst
+          |> Mtype.scrape_lazy env
+          |> Subst.Lazy.force_modtype in
+    if same mty1 mty1_whnf && same mty2 mty2_whnf
+      then mismatch mty1_whnf mty2_whnf
+      else
+        try_modtypes ~in_eq ~loc env ~mark subst mty1_whnf mty2_whnf orig_shape
+    *)
+    let mty1_red = Mtype.reduce env mty1 in
+    let mty2_red = 
+      Subst.Lazy.of_modtype mty2
+      |> Subst.Lazy.modtype Keep subst
+      |> Mtype.reduce_lazy env
+      |> Option.map Subst.Lazy.force_modtype
+    in
+    begin match mty1_red, mty2_red with
+    | None, None -> mismatch mty1 mty2
+    | _ ->
+        let mty1 = Option.value mty1_red ~default:mty1 in
+        let mty2 = Option.value mty2_red ~default:mty2 in
+        try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+    end
+
+(*
   | Mty_functor _, _
   | _, Mty_functor _ ->
       let params1 = retrieve_functor_params env mty1 in
@@ -670,6 +728,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       Error Error.(Functor (Params d))
   | _, Mty_alias _ ->
       Error (Error.Mt_core Error.Not_an_alias)
+  *)
   in
   if rl_shortcut && shortcut env subst mty1 mty2
     then (
