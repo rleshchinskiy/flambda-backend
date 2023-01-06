@@ -165,11 +165,7 @@ val tree_of_modtype_declaration:
     Ident.t -> modtype_declaration -> out_sig_item
 
 (* Forward declaration to break mutual recursion with Mtype. *)
-val strengthen:
-    (?rescope:bool -> aliasable:bool -> Env.t -> Subst.Lazy.modtype ->
-     Path.t -> Subst.Lazy.modtype) ref
-(* Forward declaration to break mutual recursion with Mtype. *)
-val scrape_with:
+val expand_module_type:
     (Env.t -> module_type -> module_type) ref
 
 (** Print a list of functor parameters while adjusting the printing environment

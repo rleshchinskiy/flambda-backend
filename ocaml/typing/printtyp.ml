@@ -1903,17 +1903,9 @@ let add_sigitem env x =
   Env.add_signature (Signature_group.flatten x) env
 
 
-let strengthen =
-  (* to be filled with Mtype.strengthen *)
-  ref ((fun ?rescope:_ ~aliasable:_ _env _mty _path -> assert false) :
-         ?rescope:bool -> aliasable:bool -> Env.t -> Subst.Lazy.modtype ->
-         Path.t -> Subst.Lazy.modtype)
-
-
-let scrape_with =
-  (* to be filled with Mtype.expand_lazy_modtype_with *)
+let expand_module_type =
   ref ((fun _env _mty -> assert false) :
-        Env.t -> module_type -> module_type)
+      Env.t -> module_type -> module_type)
 
 let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_ident p -> Omty_ident (tree_of_path Module_type p)
@@ -1928,26 +1920,28 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       Omty_functor (param, res)
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
-  | Mty_strengthen (mty,p,aliasable) ->
+  | Mty_strengthen (inner,p,aliasable) as mty ->
     let expanded () = 
+      (*
       let mty = !strengthen ~aliasable !printing_env (Subst.Lazy.of_modtype mty) p in
       let mty = Subst.Lazy.force_modtype mty in
-      match mty with
+      *)
+      match !expand_module_type !printing_env mty with
       | Mty_strengthen (mty,_,_) when rl_simple_abstract ->
           Some (tree_of_modtype ~ellipsis mty)
       | Mty_strengthen _ -> None
-      | _ -> Some (tree_of_modtype ~ellipsis mty)
+      | mty -> Some (tree_of_modtype ~ellipsis mty)
     in
     begin match rl_print_with with
     | Rlpw_expand_only ->
         begin match expanded () with
         | Some t -> t
-        | None -> Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, aliasable, None)
+        | None -> Omty_strengthen (tree_of_modtype ~ellipsis inner, tree_of_path Module p, aliasable, None)
         end
     | Rlpw_with_only ->
-        Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, aliasable, None)
+        Omty_strengthen (tree_of_modtype ~ellipsis inner, tree_of_path Module p, aliasable, None)
     | Rlpw_both ->
-        Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, aliasable, expanded ())
+        Omty_strengthen (tree_of_modtype ~ellipsis inner, tree_of_path Module p, aliasable, expanded ())
     end
   | Mty_with (_,_,_) as mty ->
       let rec collect cs = function
@@ -1958,7 +1952,7 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       let expanded = match rl_print_with with
         | Rlpw_with_only -> None
         | Rlpw_expand_only | Rlpw_both ->
-          begin match !scrape_with !printing_env mty with
+          begin match !expand_module_type !printing_env mty with
             Mty_with _ -> None
           | mty -> Some (tree_of_modtype ~ellipsis mty)
           end

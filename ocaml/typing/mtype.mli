@@ -25,8 +25,6 @@ val scrape_lazy: Env.t -> Subst.Lazy.modtype -> Subst.Lazy.modtype
 val scrape_alias: Env.t -> module_type -> module_type
 val reduce_lazy: Env.t -> Subst.Lazy.modtype -> Subst.Lazy.modtype option
 val reduce: Env.t -> module_type -> module_type option
-val scrape_with_lazy: Env.t -> Subst.Lazy.modtype -> Subst.Lazy.modtype
-val scrape_with: Env.t -> module_type -> module_type
 val scrape_for_functor_arg: Env.t -> module_type -> module_type
         (* Remove aliases in a functor argument type *)
 val scrape_for_type_of:
@@ -35,8 +33,6 @@ val scrape_for_type_of:
 val freshen: scope:int -> module_type -> module_type
         (* Return an alpha-equivalent copy of the given module type
            where bound identifiers are fresh. *)
-val make_strengthen: module_type -> Path.t -> module_type
-val expand_strengthen: aliasable:bool -> Env.t -> module_type -> Path.t -> module_type
 val strengthen: aliasable:bool -> module_type -> Path.t -> module_type
         (* Strengthen abstract type components relative to the
            given path. *)
