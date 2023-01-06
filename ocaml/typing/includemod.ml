@@ -23,8 +23,6 @@ let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
 
 let rl_shortcut = true || Option.is_some (Sys.getenv_opt "RL_SHORTCUT")
 
-let rl_check_shortcut = false
-
 type pos =
   | Module of Ident.t
   | Modtype of Ident.t
@@ -505,17 +503,15 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       Printtyp.modtype (Subst.modtype Subst.Keep subst mty2)
   );
 
-  let incl () =
   match mty1, mty2 with
-  (*
-  | _, _ when rl_shortcut && shortcut () ->
+  | _, _ when rl_shortcut && shortcut env subst mty1 mty2 ->
       if rl_debugging then (
         Format.printf "@[<hv 2>shortcut@ %a@ %a@]@."
           Printtyp.modtype mty1
           Printtyp.modtype mty2
       );
       Ok (Tcoerce_none, orig_shape)
-  *)
+
   | (Mty_signature sig1, Mty_signature sig2) ->
     begin match
       signatures ~in_eq ~loc env ~mark subst sig1 sig2 orig_shape
@@ -729,6 +725,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
   | _, Mty_alias _ ->
       Error (Error.Mt_core Error.Not_an_alias)
   *)
+  (*
   in
   if rl_shortcut && shortcut env subst mty1 mty2
     then (
@@ -755,6 +752,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       Ok (Tcoerce_none, orig_shape)
     )
     else incl ()
+  *)
 
 and shortcut env subst mty1 mty2 =
   let rec constraints cs = function
@@ -998,29 +996,13 @@ and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
       Printtyp.modtype mty1
       Printtyp.modtype mty2
   );
-  match mty1, mty2 with
-  | _ when rl_shortcut && shortcut env subst mty1 mty2 ->
-      if rl_debugging then (
-        Format.printf "@[<hv 2>shortcut(sm)@ %a@ %a@]@."
-          Printtyp.modtype mty1
-          Printtyp.modtype mty2
-      );
-      Ok (Tcoerce_none, shape)
-  | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
-      Ok (Tcoerce_none, shape)
-  | _, _ ->
-      let mty1 = Mtype.strengthen ~aliasable mty1 path1 in
-      (* let mty1 = Mtype.expand_strengthen ~aliasable env mty1 path1 in *)
-      modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape
+  let mty1 = Mtype.strengthen ~aliasable mty1 path1 in
+  modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape
 
 and strengthened_module_decl ~loc ~aliasable env ~mark
     subst md1 path1 md2 shape =
-  match md1.md_type, md2.md_type with
-  | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
-      Ok (Tcoerce_none, shape)
-  | _, _ ->
-      let md1 = Mtype.strengthen_decl ~aliasable md1 path1 in
-      modtypes ~in_eq:false ~loc env ~mark subst md1.md_type md2.md_type shape
+  let md1 = Mtype.strengthen_decl ~aliasable md1 path1 in
+   modtypes ~in_eq:false ~loc env ~mark subst md1.md_type md2.md_type shape
 
 (* Inclusion between signatures *)
 
