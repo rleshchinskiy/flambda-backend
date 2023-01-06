@@ -514,6 +514,28 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       );
       Ok (Tcoerce_none, orig_shape)
   *)
+  | (Mty_strengthen (mty1, p1, aliasable), _) ->
+    begin match Mtype.expand_strengthen ~aliasable env mty1 p1 (* Mtype.scrape env mty1 *) with
+      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
+    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+    end
+  | (_, Mty_strengthen _) ->
+    let mty2 = Subst.Lazy.of_modtype mty2
+          |> Subst.Lazy.modtype Keep subst
+    in
+    begin match Mtype.scrape_lazy env mty2 with
+      Subst.Lazy.MtyL_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
+    | mty2 ->
+        try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
+    end
+    (* 
+    let p2 = Subst.module_path subst p2 in
+    let mty2 = Subst.modtype Subst.Keep subst mty2 in
+    begin match Mtype.expand_strengthen env mty2 p2 with
+      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
+    | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+    end
+    *)
 
   | (Mty_alias p1, Mty_alias p2) ->
       if Env.is_functor_arg p2 env then
@@ -538,28 +560,6 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
               | Error reason -> Error (Error.After_alias_expansion reason)
           end
     end
-  | (Mty_strengthen _, _) ->
-    begin match (* Mtype.expand_strengthen env mty1 p1 *) Mtype.scrape env mty1 with
-      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-    end
-  | (_, Mty_strengthen _) ->
-    let mty2 = Subst.Lazy.of_modtype mty2
-          |> Subst.Lazy.modtype Keep subst
-    in
-    begin match Mtype.scrape_lazy env mty2 with
-      Subst.Lazy.MtyL_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty2 ->
-        try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
-    end
-    (* 
-    let p2 = Subst.module_path subst p2 in
-    let mty2 = Subst.modtype Subst.Keep subst mty2 in
-    begin match Mtype.expand_strengthen env mty2 p2 with
-      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-    end
-    *)
   (* Expand aliases before with: expanding with should never produce an alias
      but expanding an alias can produce with. *)
   | (Mty_with _, _) ->
@@ -727,7 +727,7 @@ and shortcut env subst mty1 mty2 =
         shallow_equal_modtypes mty1 mty2
         && ns1 = ns2
         && shallow_equal_constraints mc1 mc2
-    | Mty_strengthen (mty1,p1), Mty_strengthen (mty2,p2) ->
+    | Mty_strengthen (mty1,p1,_), Mty_strengthen (mty2,p2,_) ->
       (*
       let printt ppf = function
       | Mtt_replace (Mty_alias p) ->
@@ -762,7 +762,7 @@ and shortcut env subst mty1 mty2 =
         let super () =
           match Env.find_module p1 env with
           | md -> begin match md.md_type with
-              | Mty_strengthen (mty1',p1') ->
+              | Mty_strengthen (mty1',p1',_) ->
                   let yes =
                     shallow_equal_modtypes mty1' mty2
                     && equal_module_paths env p1' subst p2
@@ -871,7 +871,7 @@ and shortcut env subst mty1 mty2 =
   in
   let rec shallow_incl_modtypes mty1 mty2 = match mty1, mty2 with
   | _ when shallow_equal_modtypes mty1 mty2 -> true
-  | Mty_strengthen (mty1,_), mty2 -> shallow_equal_modtypes mty1 mty2
+  | Mty_strengthen (mty1,_,_), mty2 -> shallow_equal_modtypes mty1 mty2
   | Mty_with _, mty2 ->
       let (mty1,cs1) = constraints [] mty1 in
       let (mty2,cs2) = constraints [] mty2 in
@@ -950,7 +950,8 @@ and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
   | Mty_ident p1, Mty_ident p2 when equal_modtype_paths env p1 subst p2 ->
       Ok (Tcoerce_none, shape)
   | _, _ ->
-      let mty1 = Mtype.strengthen ~aliasable env mty1 path1 in
+      let mty1 = Mtype.strengthen ~aliasable mty1 path1 in
+      (* let mty1 = Mtype.expand_strengthen ~aliasable env mty1 path1 in *)
       modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape
 
 and strengthened_module_decl ~loc ~aliasable env ~mark
@@ -1254,7 +1255,7 @@ let check_functor_application_in_path
       if errors then
         let prepare_arg (arg_path, arg_mty) =
           let aliasable = can_alias env arg_path in
-          let smd = Mtype.strengthen ~aliasable env arg_mty arg_path in
+          let smd = Mtype.strengthen ~aliasable arg_mty arg_path in
           (Error.Named arg_path, smd)
         in
         let mty_f = (Env.find_module f0_path env).md_type in
@@ -1330,7 +1331,7 @@ module Functor_inclusion_diff = struct
 
   let rec keep_expansible_param = function
     | Mty_ident _ | Mty_alias _ as mty -> Some mty
-    | Mty_strengthen (mty,_) -> keep_expansible_param mty
+    | Mty_strengthen (mty,_,_) -> keep_expansible_param mty
     | Mty_signature _ | Mty_functor _ | Mty_with _ -> None
 
   let lookup_expansion { env ; res ; _ } = match res with

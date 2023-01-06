@@ -211,8 +211,8 @@ let subst_module_type env t =
           Odoc_name.to_path (full_module_type_name env (Odoc_name.from_path p))
         in
         Mty_ident new_p
-    | Mty_strengthen (mt,p) ->
-        Mty_strengthen (iter mt,p)
+    | Mty_strengthen (mt,p,a) ->
+        Mty_strengthen (iter mt,p,a)
     | Mty_with (mt,ns,mc) ->
         Mty_with (iter mt, ns, Nominal.map_module_constraint iter mc)
     | Mty_alias _

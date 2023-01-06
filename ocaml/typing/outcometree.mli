@@ -123,7 +123,7 @@ type out_module_type =
   | Omty_ident of out_ident
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
-  | Omty_strengthen of out_module_type * out_ident * out_module_type option
+  | Omty_strengthen of out_module_type * out_ident * bool * out_module_type option
   | Omty_with of out_module_type * out_module_with list * out_module_type option
 and out_module_constraint =
   | Omodc_module of out_module_type

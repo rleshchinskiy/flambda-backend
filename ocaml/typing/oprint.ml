@@ -624,11 +624,19 @@ and print_simple_out_module_type ppf =
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple
-  | Omty_strengthen (mty,id,mty_alt) ->
-     fprintf ppf "(%a/%a%a)"
-      print_simple_out_module_type mty
-      print_ident id
-      (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt
+  | Omty_strengthen (mty, id, aliasable, mty_alt) ->
+    let print_alt ppf = Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type) in
+    if aliasable
+      then
+        fprintf ppf "(%a/%a%a)"
+          print_simple_out_module_type mty
+          print_ident id
+          print_alt mty_alt
+      else
+        fprintf ppf "(module %a :@ %a@ %a)"
+          print_ident id
+          print_simple_out_module_type mty
+          print_alt mty_alt
   | Omty_with (mty, cs, mty_alt) ->
     let rec print_constrs sep ppf = function
     | [] -> ()

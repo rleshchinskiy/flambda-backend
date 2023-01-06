@@ -462,7 +462,7 @@ module Lazy_types = struct
     | MtyL_signature of signature
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
-    | MtyL_strengthen of modtype * Path.t
+    | MtyL_strengthen of modtype * Path.t * bool
     | MtyL_with of modtype * string list * module_constraint
 
   and module_constraint = modtype Nominal.module_constraint
@@ -590,7 +590,7 @@ and lazy_modtype = function
   | Mty_functor (Named (id, arg), res) ->
      MtyL_functor (Named (id, lazy_modtype arg), lazy_modtype res)
   | Mty_alias p -> MtyL_alias p
-  | Mty_strengthen (mty,p) -> MtyL_strengthen (lazy_modtype mty, p)
+  | Mty_strengthen (mty,p,a) -> MtyL_strengthen (lazy_modtype mty, p, a)
   | Mty_with (mty, ns, mc) -> MtyL_with (lazy_modtype mty, ns, lazy_module_constraint mc)
 
 and subst_lazy_modtype scoping s = function
@@ -619,8 +619,8 @@ and subst_lazy_modtype scoping s = function
                   subst_lazy_modtype scoping (add_module id (Pident id') s) res)
   | MtyL_alias p ->
       MtyL_alias (module_path s p)
-  | MtyL_strengthen (mty,p) ->
-      MtyL_strengthen (subst_lazy_modtype scoping s mty, module_path s p)
+  | MtyL_strengthen (mty,p,a) ->
+      MtyL_strengthen (subst_lazy_modtype scoping s mty, module_path s p, a)
   | MtyL_with (mty, ns, mc) ->
       MtyL_with (subst_lazy_modtype scoping s mty, ns, subst_lazy_module_constraint scoping s mc)
 
@@ -634,7 +634,7 @@ and force_modtype = function
        | Named (id, mty) -> Named (id, force_modtype mty) in
      Mty_functor (param, force_modtype res)
   | MtyL_alias p -> Mty_alias p
-  | MtyL_strengthen (mty,p) -> Mty_strengthen (force_modtype mty, p)
+  | MtyL_strengthen (mty,p,a) -> Mty_strengthen (force_modtype mty, p, a)
   | MtyL_with (mty, ns, mc) -> Mty_with (force_modtype mty, ns, force_module_constraint mc)
 
 and lazy_modtype_decl mtd =

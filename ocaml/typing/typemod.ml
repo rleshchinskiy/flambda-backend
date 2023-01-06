@@ -771,7 +771,7 @@ let merge_constraint initial_env loc sg lid constr =
                   Some wm.md.md_type
             in
             Option.map (fun mty ->
-              (namelist, Nominal.Modc_module (Mtype.make_strengthen mty wm.path))) mty
+              (namelist, Nominal.Modc_module (Mtype.strengthen ~aliasable:false mty wm.path))) mty
         | _, _ -> None
         in
         x, nom, sg
@@ -1999,7 +1999,7 @@ let rec nongen_modtype env f = function
             Env.add_module ~arg:true id Mp_present param env
       in
       nongen_modtype env f body
-  | Mty_strengthen (mty,_ ) -> nongen_modtype env f mty
+  | Mty_strengthen (mty,_ ,_) -> nongen_modtype env f mty
   | Mty_with (mty,_,mc) ->
       let open Nominal in
       let nongen_constraint = function
@@ -2094,7 +2094,7 @@ let check_recmodule_inclusion env bindings =
     let mty = Subst.modtype (Rescope scope) s mty in
     match id with
     | None -> mty
-    | Some id -> Mtype.make_strengthen mty (Subst.module_path s (Pident id))
+    | Some id -> Mtype.strengthen ~aliasable:false mty (Subst.module_path s (Pident id))
   in
 
   let rec check_incl first_time n env s =
@@ -3053,7 +3053,7 @@ let rec normalize_modtype = function
   | Mty_alias _ -> ()
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body
-  | Mty_strengthen (mty,_) -> normalize_modtype mty
+  | Mty_strengthen (mty,_,_) -> normalize_modtype mty
   | Mty_with (mty,_,mc) ->
       let normalize_module_constraint = function
       | Nominal.Modc_module mty -> normalize_modtype mty
