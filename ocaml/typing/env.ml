@@ -26,6 +26,10 @@ open Local_store
 
 module String = Misc.Stdlib.String
 
+(*
+let rl_tracing = Option.is_some (Sys.getenv_opt "RL_TRACING")
+*)
+
 let add_delayed_check_forward = ref (fun _ -> assert false)
 
 type 'a usage_tbl = ('a -> unit) Types.Uid.Tbl.t
@@ -1765,6 +1769,36 @@ let is_identchar c =
   | _ ->
     false
 
+let rec qprinttyp ppf =
+  let open Subst.Lazy in
+  function
+  | MtyL_ident p -> Format.fprintf ppf "%a" Path.print p
+  | MtyL_alias p -> Format.fprintf ppf "(module %a)" Path.print p
+  | MtyL_signature _ -> Format.fprintf ppf "sig ... end"
+  | MtyL_functor _ -> Format.fprintf ppf "functor"
+  | MtyL_strengthen (mty,p,a) ->
+      if a
+        then Format.fprintf ppf "(module %a : %a)"
+          Path.print p
+          qprinttyp mty
+        else Format.fprintf ppf "%a/%a"
+          qprinttyp mty
+          Path.print p
+  | MtyL_with (mty,ns,mc) ->
+      let printc ppf (ns,mc) = 
+        let s = String.concat "." ns in
+        match mc with
+        | Nominal.Modc_module mty ->
+            Format.fprintf ppf "module %s = %a" s qprinttyp mty
+        | Nominal.Modc_type p ->
+            Format.fprintf ppf "type %s = %a" s Path.print p
+        | Nominal.Modc_modtype p ->
+            Format.fprintf ppf "module type %s = %a" s Path.print p
+      in
+      Format.fprintf ppf "(%a with %a)"
+        qprinttyp mty
+        printc (ns,mc)
+
 let rec components_of_module_maker
           {cm_env; cm_prefixing_subst;
            cm_path; cm_addr; cm_mty; cm_shape} : _ result =
@@ -1949,8 +1983,12 @@ let rec components_of_module_maker
           fcomp_subst_cache = Hashtbl.create 17 })
   | MtyL_ident _ -> Error No_components_abstract
   | MtyL_alias p -> Error (No_components_alias p)
-  | MtyL_strengthen _ -> Error No_components_abstract
-  | MtyL_with _ -> Error No_components_abstract
+  | MtyL_strengthen _ as mty ->
+      if Option.is_some (Sys.getenv_opt "RL_TRACING") then Format.printf "Abstract %a@." qprinttyp mty ;
+      Error No_components_abstract
+  | MtyL_with _ ->
+    (* if rl_tracing then Format.printf "Abstract %a@." qprinttyp mty; *)
+    Error No_components_abstract
 
 (* Insertion of bindings by identifier + path *)
 

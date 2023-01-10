@@ -22,6 +22,8 @@ open Types
 open Format
 
 let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+let rl_tracing = Option.is_some (Sys.getenv_opt "RL_TRACING")
+
 
 type rl_with =
   | Rl_with_none
@@ -715,8 +717,25 @@ let merge_constraint initial_env loc sg lid constr =
           Format.printf "/With_module@."
         );
         let modc = match coercion with
-          | Tcoerce_none -> Some (mty, newmd.md_type)
-          | _ -> None
+          | Tcoerce_none when not remove_aliases ->
+              if rl_tracing then
+                Format.printf "@[<hv 2>RL with module %s@ %a@ %a@ %a@."
+                  s
+                  Printtyp.modtype md.md_type
+                  Printtyp.modtype newmd.md_type
+                  Printtyp.modtype mty
+              ;
+              (* Some (mty, newmd.md_type) *)
+              Some ([s], Nominal.Modc_module newmd.md_type)
+          | _ ->
+            if rl_tracing && not remove_aliases then (
+              Format.printf "@[<hv 2>RL not none %s@ %a@ %a@ %a@."
+                s
+                Printtyp.modtype md.md_type
+                Printtyp.modtype newmd.md_type
+                Printtyp.modtype mty
+              );
+            None
         in
         return
           ~replace_by:(Some(Sig_module(id, pres, newmd, rs, priv)))
@@ -734,52 +753,54 @@ let merge_constraint initial_env loc sg lid constr =
       when Ident.name id = s ->
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
         let sg = extract_sig sig_env loc md.md_type in
-        let ((path, _, tcstr, tys), nom, newsg) = merge_signature sig_env sg namelist in
+        let ((path, _, tcstr, wc),  newsg) = merge_signature sig_env sg namelist in
         let path = path_concat id path in
         real_ids := path :: !real_ids;
-        let item =
-          match md.md_type, constr, nom with
+        let item, wc =
+          match md.md_type, constr, wc with
             Mty_alias _, (With_module _ | With_type _), _ ->
               (* A module alias cannot be refined, so keep it
                  and just check that the constraint is correct *)
-              item
+              item, None
           | (Mty_ident _ | Mty_with _) as mty, _, Some (ns,mc) ->
-              let newmd = {md with md_type = Mty_with (mty,s::ns,mc)} in
-              Sig_module(id, Mp_present, newmd, rs, priv)
+              let newmd = {md with md_type = Mty_with (mty,ns,mc)} in
+              Sig_module(id, Mp_present, newmd, rs, priv), Some (s::ns, mc)
           | _ ->
               let newmd = {md with md_type = Mty_signature newsg} in
-              Sig_module(id, Mp_present, newmd, rs, priv)
+              Sig_module(id, Mp_present, newmd, rs, priv), None
         in
         (* RL FIXME: prefix tys *)
-        return ~replace_by:(Some item) (path, lid, tcstr, tys)
+        return ~replace_by:(Some item) (path, lid, tcstr, wc)
     | _ -> None
   and merge_signature env sg namelist =
     match
       Signature_group.replace_in_place (patch_item constr namelist env sg) sg
     with
+    (*
     | Some (x,sg) ->
         let nom = match constr, rl_with with
         | _, Rl_with_none -> None
         | With_module wm, _ ->             
-            assert (not wm.remove_aliases);
             let mty = match rl_with, x with
               | Rl_with_none, _ -> None
-              | Rl_with_unstrengthened, (_, _, _, Some (mty,_)) ->
+              | Rl_with_unstrengthened, (_, _, _, Some (_,mty)) ->
                   Some mty
               | Rl_with_unstrengthened, _ -> None
               | Rl_with_strengthened, _ ->
                   Some wm.md.md_type
             in
             Option.map (fun mty ->
-              (namelist, Nominal.Modc_module (Mtype.strengthen ~aliasable:false mty wm.path))) mty
+              (namelist, Nominal.Modc_module (* Mtype.strengthen ~aliasable:false mty wm.path *) mty)) mty
         | _, _ -> None
         in
         x, nom, sg
+    *)
+    | Some x -> x
     | None -> raise(Error(loc, env, With_no_component lid.txt))
   in
   try
     let names = Longident.flatten lid.txt in
-    let (tcstr, nom, sg) = merge_signature initial_env sg names in
+    let (tcstr, sg) = merge_signature initial_env sg names in
     if destructive_substitution then
       check_usage_after_substitution ~loc ~lid initial_env !real_ids
         !unpackable_modtype sg;
@@ -834,7 +855,7 @@ let merge_constraint initial_env loc sg lid constr =
     in
     check_well_formed_module initial_env loc "this instantiated signature"
       (Mty_signature sg);
-    (tcstr, nom, sg)
+    (tcstr, sg)
   with Includemod.Error explanation ->
     raise(Error(loc, initial_env, With_mismatch(lid.txt, explanation)))
 
@@ -1502,10 +1523,10 @@ and transl_with ~loc env remove_aliases (rev_tcstrs,rev_withs,sg) constr =
         let mty = transl_modtype env smty in
         l, With_modtypesubst mty
   in
-  let (tcstr, nom, sg) = merge_constraint env loc sg lid with_info in
-  let tcstr = let a,b,c,_ = tcstr in a,b,c
+  let (tcstr, sg) = merge_constraint env loc sg lid with_info in
+  let tcstr, wc = let a,b,c,wc = tcstr in (a,b,c), wc
   in
-  let rev_withs = match rev_withs, nom with
+  let rev_withs = match rev_withs, wc with
     | Some rev_withs, Some w -> Some (w :: rev_withs)
     | _ -> None
   in
@@ -2498,7 +2519,7 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
               | Some p -> Subst.add_module_arg p path mty_param Subst.identity
             in
             let mty_res' = Subst.modtype (Rescope scope) subst mty_res in
-            if rl_debugging then (
+            if rl_tracing then (
               Format.printf "@[<hv 2>tyapp subst@ %a@ %a@]@."
                 Printtyp.modtype mty_res
                 Printtyp.modtype mty_res'
@@ -3087,6 +3108,7 @@ let type_module_type_of env smod =
         let me, _shape = type_module env smod in
         me
   in
+  if rl_tracing then Format.printf "typeof %a@." Printtyp.modtype tmty.mod_type ;
   let mty = Mtype.scrape_for_type_of ~remove_aliases env tmty.mod_type in
   (* PR#5036: must not contain non-generalized type variables *)
   if nongen_modtype env Ctype.nongen_schema mty then

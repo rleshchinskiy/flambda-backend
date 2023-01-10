@@ -21,8 +21,6 @@ open Types
 
 let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
 
-let rl_shortcut = true || Option.is_some (Sys.getenv_opt "RL_SHORTCUT")
-
 type pos =
   | Module of Ident.t
   | Modtype of Ident.t
@@ -504,7 +502,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
   );
 
   match mty1, mty2 with
-  | _, _ when rl_shortcut && shortcut env subst mty1 mty2 ->
+  | _, _ when shortcut env subst mty1 mty2 ->
       if rl_debugging then (
         Format.printf "@[<hv 2>shortcut@ %a@ %a@]@."
           Printtyp.modtype mty1

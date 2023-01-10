@@ -46,8 +46,12 @@ module Persistent_signature = struct
   let load = ref (fun ~unit_name ->
       let unit_name = CU.Name.to_string unit_name in
       match Load_path.find_uncap (unit_name ^ ".cmi") with
-      | filename -> Some { filename; cmi = read_cmi filename }
-      | exception Not_found -> None)
+      | filename ->
+          if false && Option.is_some (Sys.getenv_opt "RL_TRACING") then Format.printf "read_cmi %s %s@." unit_name filename ;
+          Some { filename; cmi = read_cmi filename }
+      | exception Not_found ->  
+        if false && Option.is_some (Sys.getenv_opt "RL_TRACING") then Format.printf "cmi not found %s@." unit_name ;
+        None)
 end
 
 type can_load_cmis =

@@ -628,14 +628,14 @@ and print_simple_out_module_type ppf =
     let print_alt ppf = Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type) in
     if aliasable
       then
+        fprintf ppf "(module %a :@ %a%a)"
+          print_ident id
+          print_simple_out_module_type mty
+          print_alt mty_alt
+      else
         fprintf ppf "(%a/%a%a)"
           print_simple_out_module_type mty
           print_ident id
-          print_alt mty_alt
-      else
-        fprintf ppf "(module %a :@ %a@ %a)"
-          print_ident id
-          print_simple_out_module_type mty
           print_alt mty_alt
   | Omty_with (mty, cs, mty_alt) ->
     let rec print_constrs sep ppf = function
