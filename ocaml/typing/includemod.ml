@@ -926,7 +926,7 @@ and shortcut env subst mty1 mty2 =
   in
   let rec shallow_incl_modtypes mty1 mty2 = match mty1, mty2 with
   | _ when shallow_equal_modtypes mty1 mty2 -> true
-  | Mty_strengthen (mty1,_,_), mty2 -> shallow_equal_modtypes mty1 mty2
+  | Mty_strengthen (mty1,_,_), mty2 -> shallow_incl_modtypes mty1 mty2
   | Mty_with _, mty2 ->
       let (mty1,cs1) = constraints [] mty1 in
       let (mty2,cs2) = constraints [] mty2 in

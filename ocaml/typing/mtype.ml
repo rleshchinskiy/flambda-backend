@@ -88,15 +88,13 @@ let rec reduce_strengthen_lazy ~aliasable mty p =
       let param = Ident.create_scoped ~scope:(Path.scope p) "Arg" in
       Some (MtyL_functor(Named (Some param, arg),
         strengthen_lazy ~aliasable:false res (Papply(p, Pident param))))
-  | MtyL_strengthen (mty,_,a) when aliasable && not a ->
-    (*
+  | MtyL_strengthen (mty,q,a) when aliasable && not a ->
     begin match reduce_strengthen_lazy ~aliasable:a mty q with
-    | Some mty -> (* reduce_strengthen_lazy ~aliasable mty p *)
-        Some (strengthen_lazy ~aliasable mty p)
+    | Some mty -> reduce_strengthen_lazy ~aliasable mty p
+        (* Some (strengthen_lazy ~aliasable mty p) *)
     | None -> None
     end
-    *)
-    Some (strengthen_lazy ~aliasable mty p)
+    (* Some (strengthen_lazy ~aliasable mty p) *)
   | MtyL_alias _ | MtyL_functor _ | MtyL_strengthen _ -> Some mty
   | MtyL_ident _ | MtyL_with _ -> None
 
@@ -309,9 +307,10 @@ let rec reduce_lazy ?(rescope=false) ~aliases env mty =
       begin match reduce_with ns mc base with
       | Some mty -> Some mty
       | None ->
+        (*
         reduce_lazy ~rescope:true ~aliases env base
         |> Option.map (apply_with ns mc)
-        (*
+        *)
         let fapply mty = 
             let scope = Ctype.create_scope () in
             let mty = Subst.Lazy.modtype (Subst.Rescope scope) Subst.identity mty in
@@ -319,7 +318,6 @@ let rec reduce_lazy ?(rescope=false) ~aliases env mty =
         in
           reduce_lazy ~rescope ~aliases env base
           |> Option.map fapply
-        *)
         (*
         begin match reduce_lazy ~rescope:true ~aliases env base with
         | Some base -> Some (apply_with ns mc base)
@@ -361,7 +359,80 @@ let expand env mty =
   Subst.Lazy.of_modtype mty
   |> expand_lazy env 
   |> Subst.Lazy.force_modtype
-  
+
+
+let rec expand_paths_lazy paths env =
+  let open Subst.Lazy in
+  function
+  | MtyL_signature sg ->
+      MtyL_signature (expand_paths_lazy_sig paths env sg)
+  | MtyL_ident _ as mty -> mty
+  | MtyL_functor (param,res) ->
+      let param = match param with
+        Unit -> Unit
+      | Named (name,mty) -> Named (name, expand_paths_lazy paths env mty)
+      in
+      let res = expand_paths_lazy paths env res in
+      MtyL_functor (param,res)
+  | MtyL_with (base,ns,mc) as mty ->
+      begin match reduce_lazy env mty with
+      | Some mty -> expand_paths_lazy paths env mty
+      | None ->
+          let base = expand_paths_lazy paths env base in
+          let mc = match mc with
+          | Nominal.Modc_module mty -> Nominal.Modc_module (expand_paths_lazy paths env mty)
+          | mc -> mc
+          in
+          MtyL_with (base,ns,mc)
+      end
+  | MtyL_strengthen (_,p,_) as mty when Path.Set.mem p paths ->
+      begin match reduce_lazy env mty with
+      | Some mty -> expand_paths_lazy paths env mty
+      | None -> assert false
+      end 
+  | MtyL_strengthen (mty,p,a) ->
+      let mty = expand_paths_lazy paths env mty in
+      MtyL_strengthen (mty,p,a)
+  | MtyL_alias _ as mty ->
+      (* RL FIXME: should we expand? *)
+      mty
+
+and expand_paths_lazy_sig paths env sg =
+  let open Subst.Lazy in
+  force_signature_once sg
+  |> expand_paths_lazy_sig_items paths env
+  |> of_signature_items
+
+and expand_paths_lazy_sig_items paths env =
+  let open Subst.Lazy in
+  function
+    [] -> []
+  | SigL_module (id,pres,md,rs,vis) :: rem  ->
+      let md = { md with mdl_type = expand_paths_lazy paths env md.mdl_type } in
+      let env = Env.add_module_declaration_lazy ~update_summary:false id pres md env in
+      SigL_module (id,pres,md,rs,vis) :: expand_paths_lazy_sig_items paths env rem
+  | SigL_modtype (id,mtd,vis) :: rem ->
+      let mtd = { mtd with mtdl_type = Option.map (expand_paths_lazy paths env) mtd.mtdl_type }
+      in
+      let env = Env.add_modtype_lazy ~update_summary:false id mtd env in
+      SigL_modtype (id,mtd,vis) :: expand_paths_lazy_sig_items paths env rem
+  | item :: rem -> item :: expand_paths_lazy_sig_items paths env rem
+
+let expand_paths_sig ids env sg =
+  Subst.Lazy.of_signature sg
+  |> expand_paths_lazy_sig ids env
+  |> Subst.Lazy.force_signature
+
+let expand_to env sg paths = 
+  let rec add_paths paths = function
+  | Pdot (p,_) -> add_paths (Path.Set.add p paths) p
+  | _ -> paths
+  in
+  let paths = List.fold_left add_paths Path.Set.empty paths in
+  Subst.Lazy.of_signature sg
+  |> expand_paths_lazy_sig paths env
+  |> Subst.Lazy.force_signature
+
 let strengthen ~aliasable mty p =
   let mty' = strengthen_lazy ~aliasable (Subst.Lazy.of_modtype mty) p in
   let mty'' = Subst.Lazy.force_modtype mty' in

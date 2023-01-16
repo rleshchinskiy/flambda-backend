@@ -803,8 +803,8 @@ let merge_constraint initial_env loc sg lid constr =
     let (tcstr, sg) = merge_signature initial_env sg names in
     if destructive_substitution then
       check_usage_after_substitution ~loc ~lid initial_env !real_ids
-        !unpackable_modtype sg;
-    let sg =
+        !unpackable_modtype sg;    
+    let sub =
     match tcstr with
     | (_, _, Twith_typesubst tdecl, _) ->
        let how_to_extend_subst =
@@ -819,22 +819,24 @@ let merge_constraint initial_env loc sg lid constr =
               try Env.find_type_by_name lid.txt initial_env
               with Not_found -> assert false
             in
-            fun s path -> Subst.add_type_path path replacement s
+            fun s path ->
+                if rl_debugging then Format.printf "HTE: %a -> %a@."
+                  Printtyp.path path Printtyp.path replacement ;
+                Subst.add_type_path path replacement s
          | None ->
             let body = Option.get tdecl.typ_type.type_manifest in
             let params = tdecl.typ_type.type_params in
             if params_are_constrained params
             then raise(Error(loc, initial_env,
                              With_cannot_remove_constrained_type));
-            fun s path -> Subst.add_type_function path ~params ~body s
+            fun s path ->
+                if rl_debugging then Format.printf "HTE: %a -> <...>@."
+                  Printtyp.path path ;
+                Subst.add_type_function path ~params ~body s
        in
        let sub = Subst.change_locs Subst.identity loc in
        let sub = List.fold_left how_to_extend_subst sub !real_ids in
-       (* This signature will not be used directly, it will always be freshened
-          by the caller. So what we do with the scope doesn't really matter. But
-          making it local makes it unlikely that we will ever use the result of
-          this function unfreshened without issue. *)
-       Subst.signature Make_local sub sg
+       Some sub
     | (_, _, Twith_modsubst (real_path, _), _) ->
        let sub = Subst.change_locs Subst.identity loc in
        let sub =
@@ -843,15 +845,25 @@ let merge_constraint initial_env loc sg lid constr =
            sub
            !real_ids
        in
+       Some sub
        (* See explanation in the [Twith_typesubst] case above. *)
-       Subst.signature Make_local sub sg
     | (_, _, Twith_modtypesubst tmty, _) ->
         let add s p = Subst.add_modtype_path p tmty.mty_type s in
         let sub = Subst.change_locs Subst.identity loc in
         let sub = List.fold_left add sub !real_ids in
-        Subst.signature Make_local sub sg
+        Some sub
     | _ ->
-       sg
+       None
+    in
+    let sg = match sub with
+      | Some sub ->
+        let sg = Mtype.expand_to initial_env sg !real_ids in
+        (* This signature will not be used directly, it will always be freshened
+          by the caller. So what we do with the scope doesn't really matter. But
+          making it local makes it unlikely that we will ever use the result of
+          this function unfreshened without issue. *)
+        Subst.signature Make_local sub sg
+      | None -> sg
     in
     check_well_formed_module initial_env loc "this instantiated signature"
       (Mty_signature sg);
@@ -986,6 +998,7 @@ and approx_sig env ssg =
             | Mty_alias _ -> Mp_absent
             | _ -> Mp_present
           in
+          if rl_tracing then Format.printf "Psig_module %a@." Printtyp.modtype md.Types.md_type ;
           let id, newenv =
             Env.enter_module_declaration ~scope (Option.get pmd.pmd_name.txt)
               pres md env
@@ -2373,7 +2386,9 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         | Unit ->
           Unit, Types.Unit, env, Shape.for_unnamed_functor_param, false
         | Named (param, smty) ->
+          if rl_debugging then Format.printf "Pmod_functor@." ;
           let mty = transl_modtype_functor_arg env smty in
+          if rl_debugging then Format.printf "Pmod_functor x %a@." Printtyp.modtype mty.mty_type;
           let scope = Ctype.create_scope () in
           let (id, newenv, var) =
             match param.txt with
@@ -2773,6 +2788,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
           | Mty_alias _ -> Mp_absent
           | _ -> Mp_present
         in
+        if rl_debugging then Format.printf "Pstr_module %a@." Printtyp.modtype modl.mod_type ;
         let md_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) in
         let md =
           { md_type = enrich_module_type anchor name.txt modl.mod_type env;
