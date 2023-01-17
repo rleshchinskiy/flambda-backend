@@ -2200,12 +2200,12 @@ and package_constraints env loc mty constrs =
     | Mty_signature sg ->
         Mty_signature (package_constraints_sig env loc sg constrs)
     | mty ->
-        let rec report = function
-          Mty_ident p -> raise(Error(loc, env, Cannot_scrape_package_type p))
-        | Mty_with (mty,_,_) -> report mty
-        | Mty_functor _ | Mty_alias _ | Mty_signature _ | Mty_strengthen _ -> assert false
+        let rec ident = function
+          Mty_ident p -> p
+        | Mty_strengthen (mty,_,_) -> ident mty
+        | Mty_functor _ | Mty_alias _ | Mty_signature _ | Mty_with _ -> assert false
         in
-        report mty
+        raise(Error(loc, env, Cannot_scrape_package_type (ident mty)))
   end
 
 let modtype_of_package env loc p fl =
