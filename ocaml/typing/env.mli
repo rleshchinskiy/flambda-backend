@@ -92,11 +92,6 @@ val find_modtype: Path.t -> t -> modtype_declaration
 val find_class: Path.t -> t -> class_declaration
 val find_cltype: Path.t -> t -> class_type_declaration
 
-(*
-val find_strengthened_module:
-  aliasable:bool -> Path.t -> t -> module_type
-*)
-
 val find_ident_constructor: Ident.t -> t -> constructor_description
 val find_ident_label: Ident.t -> t -> label_description
 
@@ -526,7 +521,6 @@ val fold_cltypes:
 
 
 (** Utilities *)
-(* val scrape_alias: t -> module_type -> module_type *)
 val check_value_name: string -> Location.t -> unit
 
 val print_address : Format.formatter -> address -> unit
