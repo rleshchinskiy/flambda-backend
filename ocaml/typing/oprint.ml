@@ -525,8 +525,6 @@ let out_signature = ref (fun _ -> failwith "Oprint.out_signature")
 let out_type_extension = ref (fun _ -> failwith "Oprint.out_type_extension")
 let out_functor_parameters =
   ref (fun _ -> failwith "Oprint.out_functor_parameters")
-let out_module_with =
-  ref (fun _ -> failwith "Oprint.out_module_with")
 
 (* For anonymous functor arguments, the logic to choose between
    the long-form
@@ -919,7 +917,6 @@ let _ = out_signature := print_out_signature
 let _ = out_sig_item := print_out_sig_item
 let _ = out_type_extension := print_out_type_extension
 let _ = out_functor_parameters := print_out_functor_parameters
-let _ = out_module_with := print_out_module_with
 
 (* Phrases *)
 

@@ -113,10 +113,6 @@ and out_class_sig_item =
   | Ocsg_method of string * bool * bool * out_type
   | Ocsg_value of string * bool * bool * out_type
 
-type out_with_kind =
-  | Owk_user of bool
-  | Owk_strengthen of bool
-
 type out_module_type =
   | Omty_abstract
   | Omty_functor of (string option * out_module_type) option * out_module_type
