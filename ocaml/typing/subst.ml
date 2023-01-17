@@ -760,14 +760,12 @@ module Lazy = struct
   let of_signature sg = Lazy_backtrack.create_forced (S_eager sg)
   let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy sg)
   let of_signature_item = lazy_signature_item
-  let of_module_constraint = lazy_module_constraint
 
   let module_decl = subst_lazy_module_decl
   let modtype = subst_lazy_modtype
   let modtype_decl = subst_lazy_modtype_decl
   let signature = subst_lazy_signature
   let signature_item = subst_lazy_signature_item
-  let module_constraint = subst_lazy_module_constraint
 
   let force_module_decl = force_module_decl
   let force_modtype = force_modtype
@@ -775,7 +773,6 @@ module Lazy = struct
   let force_signature = force_signature
   let force_signature_once = force_signature_once
   let force_signature_item = force_signature_item
-  let force_module_constraint = force_module_constraint
 end
 
 let signature sc s sg =
@@ -789,6 +786,3 @@ let modtype_declaration sc s decl =
 
 let module_declaration scoping s decl =
   Lazy.(decl |> of_module_decl |> module_decl scoping s |> force_module_decl)
-
-let module_constraint scoping s mc =
-  Lazy.(mc |> of_module_constraint |> module_constraint scoping s |> force_module_constraint)
