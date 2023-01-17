@@ -631,7 +631,7 @@ let merge_constraint initial_env loc sg lid constr =
         in
         return ~ghosts
           ~replace_by:(Some (Sig_type(id, newdecl, rs, priv)))
-          (Pident id, lid, Twith_type tdecl, None)
+          ((Pident id, lid, Twith_type tdecl), None)
     | Sig_type(id, sig_decl, rs, priv) , [s],
        (With_type sdecl | With_typesubst sdecl as constr)
       when Ident.name id = s ->
@@ -648,11 +648,11 @@ let merge_constraint initial_env loc sg lid constr =
           With_type _ ->
             return ~ghosts
               ~replace_by:(Some(Sig_type(id, newdecl, rs, priv)))
-              (Pident id, lid, Twith_type tdecl, None)
+              ((Pident id, lid, Twith_type tdecl), None)
         | (* With_typesubst *) _ ->
             real_ids := [Pident id];
             return ~ghosts ~replace_by:None
-              (Pident id, lid, Twith_typesubst tdecl, None)
+              ((Pident id, lid, Twith_typesubst tdecl), None)
         end
     | Sig_modtype(id, mtd, priv), [s],
       (With_modtype mty | With_modtypesubst mty)
@@ -675,7 +675,7 @@ let merge_constraint initial_env loc sg lid constr =
           in
           return
             ~replace_by:(Some(Sig_modtype(id, mtd', priv)))
-            (Pident id, lid, Twith_modtype mty, None)
+            ((Pident id, lid, Twith_modtype mty), None)
         else begin
           let path = Pident id in
           real_ids := [path];
@@ -683,7 +683,8 @@ let merge_constraint initial_env loc sg lid constr =
           | Mty_ident _ -> ()
           | mty -> unpackable_modtype := Some mty
           end;
-          return ~replace_by:None (Pident id, lid, Twith_modtypesubst mty, None)
+          return
+            ~replace_by:None ((Pident id, lid, Twith_modtypesubst mty), None)
         end
     | Sig_module(id, pres, md, rs, priv), [s],
       With_module {lid=lid'; md=md'; path; remove_aliases}
@@ -727,7 +728,7 @@ let merge_constraint initial_env loc sg lid constr =
         in
         return
           ~replace_by:(Some(Sig_module(id, pres, newmd, rs, priv)))
-          (Pident id, lid, Twith_module (path, lid'), modc)
+          ((Pident id, lid, Twith_module (path, lid')), modc)
     | Sig_module(id, _, md, _rs, _), [s], With_modsubst (lid',path,md')
       when Ident.name id = s ->
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
@@ -736,12 +737,15 @@ let merge_constraint initial_env loc sg lid constr =
           (Includemod.strengthened_module_decl ~loc ~mark:Mark_both
              ~aliasable sig_env md' path md);
         real_ids := [Pident id];
-        return ~replace_by:None (Pident id, lid, Twith_modsubst (path, lid'), None)
+        return
+          ~replace_by:None
+          ((Pident id, lid, Twith_modsubst (path, lid')), None)
     | Sig_module(id, _, md, rs, priv) as item, s :: namelist, constr
       when Ident.name id = s ->
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
         let sg = extract_sig sig_env loc md.md_type in
-        let ((path, _, tcstr, wc),  newsg) = merge_signature sig_env sg namelist in
+        let (((path, _, tcstr), wc),  newsg) =
+          merge_signature sig_env sg namelist in
         let path = path_concat id path in
         real_ids := path :: !real_ids;
         let item, wc =
@@ -757,86 +761,77 @@ let merge_constraint initial_env loc sg lid constr =
               let newmd = {md with md_type = Mty_signature newsg} in
               Sig_module(id, Mp_present, newmd, rs, priv), None
         in
-        (* RL FIXME: prefix tys *)
-        return ~replace_by:(Some item) (path, lid, tcstr, wc)
+        return ~replace_by:(Some item) ((path, lid, tcstr), wc)
     | _ -> None
   and merge_signature env sg namelist =
     match
       Signature_group.replace_in_place (patch_item constr namelist env sg) sg
     with
-    | Some x -> x
+    | Some (x,sg) -> x, sg
     | None -> raise(Error(loc, env, With_no_component lid.txt))
   in
   try
     let names = Longident.flatten lid.txt in
-    let (tcstr, sg) = merge_signature initial_env sg names in
+    let ((tcstr, wc), sg) = merge_signature initial_env sg names in
     if destructive_substitution then
       check_usage_after_substitution ~loc ~lid initial_env !real_ids
-        !unpackable_modtype sg;    
-    let sub =
-    match tcstr with
-    | (_, _, Twith_typesubst tdecl, _) ->
-       let how_to_extend_subst =
-         let sdecl =
-           match constr with
-           | With_typesubst sdecl -> sdecl
-           | _ -> assert false
-         in
-         match type_decl_is_alias sdecl with
-         | Some lid ->
-            let replacement, _ =
-              try Env.find_type_by_name lid.txt initial_env
-              with Not_found -> assert false
-            in
-            fun s path ->
-                if rl_debugging then Format.printf "HTE: %a -> %a@."
-                  Printtyp.path path Printtyp.path replacement ;
-                Subst.add_type_path path replacement s
-         | None ->
-            let body = Option.get tdecl.typ_type.type_manifest in
-            let params = tdecl.typ_type.type_params in
-            if params_are_constrained params
-            then raise(Error(loc, initial_env,
-                             With_cannot_remove_constrained_type));
-            fun s path ->
-                if rl_debugging then Format.printf "HTE: %a -> <...>@."
-                  Printtyp.path path ;
-                Subst.add_type_function path ~params ~body s
-       in
-       let sub = Subst.change_locs Subst.identity loc in
-       let sub = List.fold_left how_to_extend_subst sub !real_ids in
-       Some sub
-    | (_, _, Twith_modsubst (real_path, _), _) ->
-       let sub = Subst.change_locs Subst.identity loc in
-       let sub =
-         List.fold_left
-           (fun s path -> Subst.add_module_path path real_path s)
-           sub
-           !real_ids
-       in
-       Some sub
-       (* See explanation in the [Twith_typesubst] case above. *)
-    | (_, _, Twith_modtypesubst tmty, _) ->
-        let add s p = Subst.add_modtype_path p tmty.mty_type s in
+        !unpackable_modtype sg;
+    let sub = match tcstr with
+      | (_, _, Twith_typesubst tdecl) ->
+        let how_to_extend_subst =
+          let sdecl =
+            match constr with
+            | With_typesubst sdecl -> sdecl
+            | _ -> assert false
+          in
+          match type_decl_is_alias sdecl with
+          | Some lid ->
+              let replacement, _ =
+                try Env.find_type_by_name lid.txt initial_env
+                with Not_found -> assert false
+              in
+              fun s path -> Subst.add_type_path path replacement s
+          | None ->
+              let body = Option.get tdecl.typ_type.type_manifest in
+              let params = tdecl.typ_type.type_params in
+              if params_are_constrained params
+              then raise(Error(loc, initial_env,
+                              With_cannot_remove_constrained_type));
+              fun s path -> Subst.add_type_function path ~params ~body s
+        in
         let sub = Subst.change_locs Subst.identity loc in
-        let sub = List.fold_left add sub !real_ids in
+        let sub = List.fold_left how_to_extend_subst sub !real_ids in
         Some sub
-    | _ ->
-       None
+      | (_, _, Twith_modsubst (real_path, _)) ->
+        let sub = Subst.change_locs Subst.identity loc in
+        let sub =
+          List.fold_left
+            (fun s path -> Subst.add_module_path path real_path s)
+            sub
+            !real_ids
+        in
+        Some sub
+      | (_, _, Twith_modtypesubst tmty) ->
+          let add s p = Subst.add_modtype_path p tmty.mty_type s in
+          let sub = Subst.change_locs Subst.identity loc in
+          let sub = List.fold_left add sub !real_ids in
+          Some sub
+      | _ ->
+        None
     in
     let sg = match sub with
       | Some sub ->
-        let sg = Mtype.expand_to initial_env sg !real_ids in
-        (* This signature will not be used directly, it will always be freshened
-          by the caller. So what we do with the scope doesn't really matter. But
-          making it local makes it unlikely that we will ever use the result of
-          this function unfreshened without issue. *)
-        Subst.signature Make_local sub sg
+          let sg = Mtype.expand_to initial_env sg !real_ids in
+          (* This signature will not be used directly, it will always be freshened
+            by the caller. So what we do with the scope doesn't really matter. But
+            making it local makes it unlikely that we will ever use the result of
+            this function unfreshened without issue. *)
+          Subst.signature Make_local sub sg
       | None -> sg
     in
     check_well_formed_module initial_env loc "this instantiated signature"
       (Mty_signature sg);
-    (tcstr, sg)
+    ((tcstr,wc), sg)
   with Includemod.Error explanation ->
     raise(Error(loc, initial_env, With_mismatch(lid.txt, explanation)))
 
@@ -1501,11 +1496,9 @@ and transl_with ~loc env remove_aliases (rev_tcstrs,rev_withs,sg) constr =
         let mty = transl_modtype env smty in
         l, With_modtypesubst mty
   in
-  let (tcstr, sg) = merge_constraint env loc sg lid with_info in
-  let tcstr, wc = let a,b,c,wc = tcstr in (a,b,c), wc
-  in
-  let rev_withs = match rev_withs, wc with
-    | Some rev_withs, Some w -> Some (w :: rev_withs)
+  let ((tcstr,wc),sg) = merge_constraint env loc sg lid with_info in
+  let rev_withs = match wc, rev_withs with
+    | Some w, Some rev_withs -> Some (w :: rev_withs)
     | _ -> None
   in
   (tcstr :: rev_tcstrs, rev_withs, sg)
@@ -2011,7 +2004,7 @@ let rec nongen_modtype env f = function
       | Modc_modtype _ -> false
       in
       nongen_modtype env f mty || nongen_constraint mc
-  
+
 and nongen_signature_item env f = function
     Sig_value(_id, desc, _) -> f env desc.val_type
   | Sig_module(_id, _, md, _, _) -> nongen_modtype env f md.md_type
@@ -2093,7 +2086,8 @@ let check_recmodule_inclusion env bindings =
     let mty = Subst.modtype (Rescope scope) s mty in
     match id with
     | None -> mty
-    | Some id -> Mtype.strengthen ~aliasable:false mty (Subst.module_path s (Pident id))
+    | Some id ->
+        Mtype.strengthen ~aliasable:false mty (Subst.module_path s (Pident id))
   in
 
   let rec check_incl first_time n env s =
@@ -2498,13 +2492,7 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
               | None -> Subst.identity
               | Some p -> Subst.add_module p path Subst.identity
             in
-            let mty_res' = Subst.modtype (Rescope scope) subst mty_res in
-            if rl_tracing then (
-              Format.printf "@[<hv 2>tyapp subst@ %a@ %a@]@."
-                Printtyp.modtype mty_res
-                Printtyp.modtype mty_res'
-            );
-            mty_res'
+            Subst.modtype (Rescope scope) subst mty_res
         | None ->
             let env, nondep_mty =
               match param with
@@ -2537,13 +2525,6 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
             end;
             nondep_mty
       in
-      if rl_debugging then (
-        Format.printf "@[<hv 2>typeapp@ %a@ to %a@ at %a@ = %a@]@."
-        Printtyp.modtype mty_functor
-        Printtyp.modtype app_view.arg.mod_type
-        Printtyp.modtype mty_param
-        Printtyp.modtype mty_appl
-      );
       check_well_formed_module env apply_loc
         "the signature of this functor application" mty_appl;
       { mod_desc = Tmod_apply(funct, app_view.arg, coercion);
@@ -2753,7 +2734,6 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
           | Mty_alias _ -> Mp_absent
           | _ -> Mp_present
         in
-        if rl_debugging then Format.printf "Pstr_module %a@." Printtyp.modtype modl.mod_type ;
         let md_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) in
         let md =
           { md_type = enrich_module_type anchor name.txt modl.mod_type env;
@@ -3089,7 +3069,6 @@ let type_module_type_of env smod =
         let me, _shape = type_module env smod in
         me
   in
-  if rl_tracing then Format.printf "typeof %a@." Printtyp.modtype tmty.mod_type ;
   let mty = Mtype.scrape_for_type_of ~remove_aliases env tmty.mod_type in
   (* PR#5036: must not contain non-generalized type variables *)
   if nongen_modtype env Ctype.nongen_schema mty then
