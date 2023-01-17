@@ -597,11 +597,6 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
     end
 
 and shortcut env subst mty1 mty2 =
-  let rec constraints cs = function
-    | Mty_with (mty,ns,mc) ->
-        constraints ((ns,mc) :: cs) mty
-    | mty -> mty, cs
-  in
   let equal_type_paths p1 p2 =
     p1 = p2 ||
     (let p1 = Env.normalize_type_path None env p1 in
@@ -676,11 +671,9 @@ and shortcut env subst mty1 mty2 =
         equal_type_paths p1 p2
     | _, _ -> false
   in
-  let shortcut_constraint c1 c2 =
+  let incl_constraint c1 c2 =
     let open Generic in
     match c1, c2 with
-    | Modc_modtype p1, Modc_modtype p2 ->
-        equal_modtype_paths env p1 subst p2
     | Modc_module mty1, Modc_module mty2 ->
         let ok = shallow_equal_modtypes mty1 mty2
         in
@@ -699,33 +692,30 @@ and shortcut env subst mty1 mty2 =
             printt mty2
         );
         ok
-    | Modc_type p1, Modc_type p2 ->
-        let p1 = Env.normalize_type_path None env p1 in
-        let p2 = Env.normalize_type_path None env (Subst.type_path subst p2) in
-        Path.same p1 p2
+    | Modc_modtype p1, Modc_modtype p2 -> equal_modtype_paths env p1 subst p2
+    | Modc_type p1, Modc_type p2 -> equal_type_paths p1 p2
     | _ -> false
   in
-  let rec shortcut_constraints cs1 cs2 = match cs1, cs2 with
+  let rec incl_constraints cs1 cs2 = match cs1, cs2 with
     | _, [] -> true
-    (* | [], [] -> true *)
     | (ns1,c1)::cs1, (ns2,c2)::cs2 ->
         ns1 = ns2
-        && shortcut_constraint c1 c2
-        && shortcut_constraints cs1 cs2
+        && incl_constraint c1 c2
+        && incl_constraints cs1 cs2
     | _, _ -> false
-  in
-  let shortcut_constraints' cs1 cs2 = match cs1, cs2 with
-    | _, [] -> true
-    | _ -> shortcut_constraints cs1 cs2
   in
   let rec shallow_incl_modtypes mty1 mty2 = match mty1, mty2 with
   | _ when shallow_equal_modtypes mty1 mty2 -> true
   | Mty_strengthen (mty1,_,_), mty2 -> shallow_incl_modtypes mty1 mty2
   | Mty_with _, mty2 ->
+      let rec constraints cs = function
+        | Mty_with (mty,ns,mc) -> constraints ((ns,mc) :: cs) mty
+        | mty -> mty, cs
+      in
       let (mty1,cs1) = constraints [] mty1 in
       let (mty2,cs2) = constraints [] mty2 in
       shallow_incl_modtypes mty1 mty2
-      && shortcut_constraints' cs1 cs2
+      && incl_constraints cs1 cs2
   | _ -> false
   in
   shallow_incl_modtypes mty1 mty2
