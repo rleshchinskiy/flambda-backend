@@ -190,33 +190,6 @@ let class_declarations env subst decl1 decl2 =
   | reason ->
      Error Error.(Core(Class_declarations(diff decl1 decl2 reason)))
 
-(* Expand a module type identifier when possible *)
-
-(*
-let expand_modtype_path env path =
-  match Env.find_modtype_expansion path env with
-   | exception Not_found -> None
-   | x -> Some x
-*)
-
-let expand_module_alias env path =
-  match Env.find_module path env with
-   | exception Not_found -> None
-   | md -> Some md.md_type
-
-  (*
-  match
-    if strengthen then Env.find_strengthened_module ~aliasable:true path env
-    else (Env.find_module path env).md_type
-  with
-  | x -> Some x
-  | exception Not_found -> None
-  *)
-  (*
-  | x -> Ok x
-  | exception Not_found -> Error (Error.Unbound_module_path path)
-  *)
-
 (* Extract name, kind and ident from a signature item *)
 
 type field_kind =
@@ -574,7 +547,6 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       else if not (equal_module_paths env p1 subst p2) then
           Error Error.(Mt_core Incompatible_aliases)
       else Ok (Tcoerce_none, orig_shape)
-
   | (Mty_alias p1, _) -> begin
       match
         Env.normalize_module_path (Some Location.none) env p1
@@ -582,96 +554,19 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
       | exception Env.Error (Env.Missing_module (_, _, path)) ->
           Error Error.(Mt_core(Unbound_module_path path))
       | p1 ->
-          begin match expand_module_alias env p1 with
-          | None -> Error (Error.Mt_core (Error.Unbound_module_path p1))
-          | Some mty1 ->
-              match strengthened_modtypes ~in_eq ~loc ~aliasable:true env ~mark
-                      subst mty1 p1 mty2 orig_shape
+          begin match Env.find_module p1 env with
+          | md ->
+              begin match strengthened_modtypes ~in_eq ~loc ~aliasable:true env ~mark
+                      subst md.md_type p1 mty2 orig_shape
               with
               | Ok _ as x -> x
               | Error reason -> Error (Error.After_alias_expansion reason)
+              end
+          | exception Not_found -> Error (Error.Mt_core (Error.Unbound_module_path p1))
           end
     end
-  
-  (*
-  | (Mty_strengthen _, _) ->
-    begin match (* Mtype.expand_strengthen ~aliasable env mty1 p1 *) Mtype.scrape env mty1 with
-      Mty_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-    end
-  | (_, Mty_strengthen _) ->
-    let mty2 = Subst.Lazy.of_modtype mty2
-          |> Subst.Lazy.modtype Keep subst
-    in
-    begin match Mtype.scrape_lazy env mty2 with
-      Subst.Lazy.MtyL_strengthen _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty2 ->
-        try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
-    end
-
-  (* Expand aliases before with: expanding with should never produce an alias
-     but expanding an alias can produce with. *)
-  | (Mty_with _, _) ->
-    begin match Mtype.scrape_with env mty1 with
-      Mty_with _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty1 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-    end
-  | (_, Mty_with _) ->
-    let mty2 = Subst.Lazy.of_modtype mty2
-          |> Subst.Lazy.modtype Subst.Keep subst
-    in
-    begin match Mtype.scrape_with_lazy env mty2 with
-      MtyL_with _ -> Error (Error.Mt_core Abstract_module_type)
-    | mty2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 (Subst.Lazy.force_modtype mty2) orig_shape
-    end
-  (*
-  | (Mty_ident p1, Mty_ident p2) ->
-      let p1 = Env.normalize_modtype_path env p1 in
-      let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
-      if Path.same p1 p2 then Ok (Tcoerce_none, orig_shape)
-      else
-        begin match expand_modtype_path env p1, expand_modtype_path env p2 with
-        | Some mty1, Some mty2 ->
-            try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
-        | None, _  | _, None -> Error (Error.Mt_core Abstract_module_type)
-        end
-  *)
-  | (Mty_ident p1, _) ->
-      let p1 = Env.normalize_modtype_path env p1 in
-      begin match expand_modtype_path env p1 with
-      | Some p1 ->
-          try_modtypes ~in_eq ~loc env ~mark subst p1 mty2 orig_shape
-      | None -> Error (Error.Mt_core Abstract_module_type)
-      end
-  | (_, Mty_ident p2) ->
-      let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
-      begin match expand_modtype_path env p2 with
-      | Some p2 -> try_modtypes ~in_eq ~loc env ~mark subst mty1 p2 orig_shape
-      | None ->
-          begin match mty1 with
-          | Mty_functor _ ->
-              let params1 = retrieve_functor_params env mty1 in
-              let d = Error.sdiff params1 ([],mty2) in
-              Error Error.(Functor (Params d))
-          | _ -> Error Error.(Mt_core Not_an_identifier)
-          end
-      end
-  *)
 
   | _ ->
-    (*
-    let rec same orig now = match orig, now with
-      | Mty_ident p1, Mty_ident p2 -> p1 = p2
-      | Mty_alias p1, Mty_alias p2 -> p1 = p2
-      | Mty_strengthen (orig,p1,_), Mty_strengthen (now,p2,_) ->
-          p1 = p2 && same orig now
-      | Mty_with (orig,_,_), Mty_with (now,_,_) ->
-          same orig now
-      | Mty_signature _, Mty_signature _ -> true
-      | Mty_functor _, Mty_functor _ -> true
-      | _, _ -> false
-    in
-    *)
     let mismatch mty1 mty2 = match mty1, mty2 with
       | (Mty_ident _ | Mty_strengthen _| Mty_with _), _ ->
           Error (Error.Mt_core Abstract_module_type)
@@ -686,20 +581,8 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
           Error (Error.Mt_core Error.Not_an_alias)
       | _, _ -> Error (Error.Mt_core Abstract_module_type)
     in
-    (*
-    let mty1_whnf = Mtype.scrape env mty1 in
-    let mty2_whnf =
-          Subst.Lazy.of_modtype mty2
-          |> Subst.Lazy.modtype Keep subst
-          |> Mtype.scrape_lazy env
-          |> Subst.Lazy.force_modtype in
-    if same mty1 mty1_whnf && same mty2 mty2_whnf
-      then mismatch mty1_whnf mty2_whnf
-      else
-        try_modtypes ~in_eq ~loc env ~mark subst mty1_whnf mty2_whnf orig_shape
-    *)
     let mty1_red = Mtype.reduce env mty1 in
-    let mty2_red = 
+    let mty2_red =
       Subst.Lazy.of_modtype mty2
       |> Subst.Lazy.modtype Keep subst
       |> Mtype.reduce_lazy env
@@ -713,45 +596,6 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
         try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
     end
 
-(*
-  | Mty_functor _, _
-  | _, Mty_functor _ ->
-      let params1 = retrieve_functor_params env mty1 in
-      let params2 = retrieve_functor_params env mty2 in
-      let d = Error.sdiff params1 params2 in
-      Error Error.(Functor (Params d))
-  | _, Mty_alias _ ->
-      Error (Error.Mt_core Error.Not_an_alias)
-  *)
-  (*
-  in
-  if rl_shortcut && shortcut env subst mty1 mty2
-    then (
-      if rl_debugging then (
-        Format.printf "@[<hv 2>shortcut@ %a@ %a@]@."
-          Printtyp.modtype mty1
-          Printtyp.modtype mty2
-      );
-      if rl_check_shortcut then (
-        match incl () with
-        | Ok (Tcoerce_none, _) -> ()
-        | Ok (coercion, _) ->
-            Format.printf "@[<hv 2>coercion mismatch %a@ %a@ %a@]@."
-              print_coercion coercion
-              Printtyp.modtype mty1
-              Printtyp.modtype mty2;
-            assert false
-        | Error _ ->
-            Format.printf "@[<hv 2>shortcut error@ %a@ %a@]@."
-              Printtyp.modtype mty1
-              Printtyp.modtype mty2;
-            assert false
-      );
-      Ok (Tcoerce_none, orig_shape)
-    )
-    else incl ()
-  *)
-
 and shortcut env subst mty1 mty2 =
   let rec constraints cs = function
     | Mty_with (mty,ns,mc) ->
@@ -764,13 +608,6 @@ and shortcut env subst mty1 mty2 =
     let p2 = Env.normalize_type_path None env (Subst.type_path subst p2) in
     Path.same p1 p2)
   in
-  (*
-  let equal_modtype_paths p1 p2 =
-    let p1= Env.normalize_modtype_path env p1 in
-    let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
-    Path.same p1 p2
-  in
-  *)
   let rec shallow_equal_modtypes mty1 mty2 =
     match mty1, mty2 with
     | Mty_alias p1, Mty_alias p2 ->
@@ -783,22 +620,6 @@ and shortcut env subst mty1 mty2 =
         && ns1 = ns2
         && shallow_equal_constraints mc1 mc2
     | Mty_strengthen (mty1,p1,_), Mty_strengthen (mty2,p2,_) ->
-      (*
-      let printt ppf = function
-      | Mtt_replace (Mty_alias p) ->
-          let md = Env.find_module p env
-          in
-          Format.fprintf ppf "module %a : %a"
-            Printtyp.path p
-            Printtyp.modtype md.md_type
-      | t -> Printtyp.modtype_transform ppf t
-    in
-    Format.printf "@[<hv 2>mismatch@ %a@ %a@]@."
-      (* Printtyp.modtype_transform t1 
-      Printtyp.modtype_transform t2 *)
-      printt t1
-      printt t2
-      *)
       let printm ppf p =
         try
           let md = Env.find_module p env 
@@ -854,31 +675,6 @@ and shortcut env subst mty1 mty2 =
     | Modc_type p1, Modc_type p2 ->
         equal_type_paths p1 p2
     | _, _ -> false
-  (*
-  and shallow_equal_transforms t1 t2 =
-    let open Nominal in
-    let eq_mod_paths p1 p2 = if equal_module_paths env p1 subst p2
-      then true
-      else (
-        if rl_debugging then (
-          let md1 = Env.find_module p1 env in
-          let md2 = Env.find_module (Subst.module_path subst p2) env in
-          Format.printf "@[<hv 2>couldn't match@ %a : %a@ with@ %a : %a@]@."
-            Printtyp.path p1
-            Printtyp.modtype md1.md_type
-            Printtyp.path p2
-            Printtyp.modtype md2.md_type
-        );
-        false
-      )
-    in
-    match t1, t2 with
-    | Mtt_strengthen p1, Mtt_strengthen p2 ->
-        eq_mod_paths p1 p2
-    | Mtt_replace mty1, Mtt_replace mty2 ->
-        shallow_equal_modtypes mty1 mty2
-    | _, _ -> false
-  *)
   in
   let shortcut_constraint c1 c2 =
     let open Nominal in
@@ -899,8 +695,6 @@ and shortcut env subst mty1 mty2 =
             | mty -> Printtyp.modtype ppf mty
           in
           Format.printf "@[<hv 2>mismatch@ %a@ %a@]@."
-            (* Printtyp.modtype_transform t1 
-            Printtyp.modtype_transform t2 *)
             printt mty1
             printt mty2
         );
@@ -935,22 +729,6 @@ and shortcut env subst mty1 mty2 =
   | _ -> false
   in
   shallow_incl_modtypes mty1 mty2
-  (*
-  match constraints [] mty1, constraints [] mty2 with
-  | (Mty_ident p1, cs1), (Mty_ident p2, cs2) ->
-      equal_modtype_paths env p1 subst p2 && (*
-      let p1 = Env.normalize_modtype_path env p1 in
-      let p2 = Env.normalize_modtype_path env (Subst.modtype_path subst p2) in
-      Path.same p1 p2 && *) shortcut_constraints' cs1 cs2
-  | (Mty_strengthen (mty1,_), []), (mty2, []) when shallow_equal_modtypes mty1 mty2 -> true
-  | _ -> shallow_equal_modtypes mty1 mty2
-  (*
-  | (Mty_strengthen (mty1,p1),[]), (Mty_strengthen (mty2,p2),[]) ->
-      shallow_equal_modtypes mty1 mty2
-      && equal_module_paths env p1 subst p2
-  | _ -> false
-  *)
-  *)
 
 (* Functor parameters *)
 
