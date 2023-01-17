@@ -459,6 +459,68 @@ end
    described above.
 *)
 
+let shallow_modtypes ~in_eq env subst mty1 mty2 =
+  let equal_type_paths p1 p2 =
+    p1 = p2 ||
+    (let p1 = Env.normalize_type_path None env p1 in
+    let p2 = Env.normalize_type_path None env (Subst.type_path subst p2) in
+    Path.same p1 p2)
+  in
+  let rec cmp_modtypes ~incl mty1 mty2 =
+    match mty1, mty2 with
+    | Mty_alias p1, Mty_alias p2 ->
+        not (Env.is_functor_arg p2 env)
+        && equal_module_paths env p1 subst p2
+    | Mty_ident p1, Mty_ident p2 ->
+        equal_modtype_paths env p1 subst p2
+    | Mty_strengthen (mty1,p1,_), Mty_strengthen (mty2,p2,_)
+        when cmp_modtypes ~incl mty1 mty2
+          && cmp_strengthen_paths ~incl p1 mty2 p2 ->
+        true
+    | Mty_strengthen (mty1,_,_), mty2 when incl ->
+        cmp_modtypes ~incl mty1 mty2
+    | Mty_with _, mty2 ->
+        let rec constraints cs = function
+          | Mty_with (mty,ns,mc) -> constraints ((ns,mc) :: cs) mty
+          | mty -> mty, cs
+        in
+        let (mty1,cs1) = constraints [] mty1 in
+        let (mty2,cs2) = constraints [] mty2 in
+        cmp_modtypes ~incl mty1 mty2
+        && cmp_constraints ~incl cs1 cs2
+    | _ -> false
+  and cmp_strengthen_paths ~incl p1 mty2 p2 =
+    let check_module () =
+      match (Env.find_module p1 env).md_type with
+      | Mty_strengthen (mty1',p1',_) ->
+          cmp_modtypes ~incl:true mty1' mty2
+          && equal_module_paths env p1' subst p2
+      | _ -> false
+      | exception Not_found -> false
+      in
+      equal_module_paths env p1 subst p2 || (incl && check_module ())
+  and cmp_constraints ~incl cs1 cs2 =
+    match cs1, cs2 with
+    | [], [] -> true
+    | _, [] when incl -> true
+    | (ns1,c1)::cs1, (ns2,c2)::cs2 ->
+        ns1 = ns2
+        && cmp_constraint c1 c2
+        && cmp_constraints ~incl cs1 cs2
+    | _, _ -> false
+  and cmp_constraint mc1 mc2 =
+    let open Generic in
+    match mc1, mc2 with
+    | Modc_module mty1, Modc_module mty2 ->
+        cmp_modtypes ~incl:in_eq mty1 mty2
+    | Modc_modtype p1, Modc_modtype p2 ->
+          equal_modtype_paths env p1 subst p2
+    | Modc_type p1, Modc_type p2 ->
+        equal_type_paths p1 p2
+    | _, _ -> false
+  in
+  cmp_modtypes ~incl:true mty1 mty2
+
 let rec modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape =
   match try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape with
   | Ok _ as ok -> ok
@@ -475,7 +537,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
   );
 
   match mty1, mty2 with
-  | _, _ when shortcut env subst mty1 mty2 ->
+  | _, _ when shallow_modtypes ~in_eq env subst mty1 mty2 ->
       if rl_debugging then (
         Format.printf "@[<hv 2>shortcut@ %a@ %a@]@."
           Printtyp.modtype mty1
@@ -541,12 +603,11 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
         Error Error.(Functor (Result res))
     end
 
-  | (Mty_alias p1, Mty_alias p2) ->
+  | (Mty_alias _, Mty_alias p2) ->
       if Env.is_functor_arg p2 env then
         Error (Error.Invalid_module_alias p2)
-      else if not (equal_module_paths env p1 subst p2) then
-          Error Error.(Mt_core Incompatible_aliases)
-      else Ok (Tcoerce_none, orig_shape)
+      else 
+        Error Error.(Mt_core Incompatible_aliases)
   | (Mty_alias p1, _) -> begin
       match
         Env.normalize_module_path (Some Location.none) env p1
@@ -595,130 +656,6 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
         let mty2 = Option.value mty2_red ~default:mty2 in
         try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
     end
-
-and shortcut env subst mty1 mty2 =
-  let equal_type_paths p1 p2 =
-    p1 = p2 ||
-    (let p1 = Env.normalize_type_path None env p1 in
-    let p2 = Env.normalize_type_path None env (Subst.type_path subst p2) in
-    Path.same p1 p2)
-  in
-  let rec shallow_equal_modtypes mty1 mty2 =
-    match mty1, mty2 with
-    | Mty_alias p1, Mty_alias p2 ->
-        not (Env.is_functor_arg p2 env)
-        && equal_module_paths env p1 subst p2
-    | Mty_ident p1, Mty_ident p2 ->
-        equal_modtype_paths env p1 subst p2
-    | Mty_with (mty1,ns1,mc1), Mty_with (mty2,ns2,mc2) ->
-        shallow_equal_modtypes mty1 mty2
-        && ns1 = ns2
-        && shallow_equal_constraints mc1 mc2
-    | Mty_strengthen (mty1,p1,_), Mty_strengthen (mty2,p2,_) ->
-      let printm ppf p =
-        try
-          let md = Env.find_module p env 
-          in
-          Format.fprintf ppf "module %a : %a"
-            Printtyp.path p
-            Printtyp.modtype md.md_type
-        with Not_found ->
-          Format.fprintf ppf "module %a"
-            Printtyp.path p
-      in
-      let ok = 
-        shallow_equal_modtypes mty1 mty2
-      in
-      if ok then
-        let super () =
-          match Env.find_module p1 env with
-          | md -> begin match md.md_type with
-              | Mty_strengthen (mty1',p1',_) ->
-                  let yes =
-                    shallow_equal_modtypes mty1' mty2
-                    && equal_module_paths env p1' subst p2
-                  in
-                  if yes && rl_debugging then (
-                    Format.printf "@[<hv 2>supershortcut@ module %a : %a@ with@ %a@]@."
-                      Printtyp.path p1
-                      Printtyp.modtype md.md_type
-                      printm (Subst.modtype_path subst p2)        
-                  );
-                  yes
-              | _ -> false
-              end
-          | exception Not_found -> false
-        in
-        let better = equal_module_paths env p1 subst p2 || super () in
-        if rl_debugging && not better then
-        (
-          Format.printf "@[<hv 2>couldn't match(s)@ %a@ with@ %a@]@."
-            printm p1
-            printm (Subst.module_path subst p2)
-        );
-        better
-      else
-        false
-    | _, _ -> false
-  and shallow_equal_constraints mc1 mc2 =
-    let open Generic in
-    match mc1, mc2 with
-    | Modc_modtype p1, Modc_modtype p2 ->
-        equal_modtype_paths env p1 subst p2
-    | Modc_module mty1, Modc_module mty2 ->
-        shallow_equal_modtypes mty1 mty2
-    | Modc_type p1, Modc_type p2 ->
-        equal_type_paths p1 p2
-    | _, _ -> false
-  in
-  let incl_constraint c1 c2 =
-    let open Generic in
-    match c1, c2 with
-    | Modc_module mty1, Modc_module mty2 ->
-        let ok = shallow_equal_modtypes mty1 mty2
-        in
-        if not ok && rl_debugging then (
-          let printt ppf = function
-            | Mty_alias p ->
-                let md = Env.find_module p env
-                in
-                Format.fprintf ppf "module %a : %a"
-                  Printtyp.path p
-                  Printtyp.modtype md.md_type
-            | mty -> Printtyp.modtype ppf mty
-          in
-          Format.printf "@[<hv 2>mismatch@ %a@ %a@]@."
-            printt mty1
-            printt mty2
-        );
-        ok
-    | Modc_modtype p1, Modc_modtype p2 -> equal_modtype_paths env p1 subst p2
-    | Modc_type p1, Modc_type p2 -> equal_type_paths p1 p2
-    | _ -> false
-  in
-  let rec incl_constraints cs1 cs2 = match cs1, cs2 with
-    | _, [] -> true
-    | (ns1,c1)::cs1, (ns2,c2)::cs2 ->
-        ns1 = ns2
-        && incl_constraint c1 c2
-        && incl_constraints cs1 cs2
-    | _, _ -> false
-  in
-  let rec shallow_incl_modtypes mty1 mty2 = match mty1, mty2 with
-  | _ when shallow_equal_modtypes mty1 mty2 -> true
-  | Mty_strengthen (mty1,_,_), mty2 -> shallow_incl_modtypes mty1 mty2
-  | Mty_with _, mty2 ->
-      let rec constraints cs = function
-        | Mty_with (mty,ns,mc) -> constraints ((ns,mc) :: cs) mty
-        | mty -> mty, cs
-      in
-      let (mty1,cs1) = constraints [] mty1 in
-      let (mty2,cs2) = constraints [] mty2 in
-      shallow_incl_modtypes mty1 mty2
-      && incl_constraints cs1 cs2
-  | _ -> false
-  in
-  shallow_incl_modtypes mty1 mty2
 
 (* Functor parameters *)
 
