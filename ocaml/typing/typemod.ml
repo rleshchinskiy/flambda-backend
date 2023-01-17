@@ -2531,7 +2531,7 @@ and type_one_application ~ctx:(apply_loc,md_f,args)
             let subst =
               match param with
               | None -> Subst.identity
-              | Some p -> Subst.add_module_arg p path mty_param Subst.identity
+              | Some p -> Subst.add_module p path Subst.identity
             in
             let mty_res' = Subst.modtype (Rescope scope) subst mty_res in
             if rl_tracing then (

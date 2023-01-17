@@ -30,7 +30,6 @@ type t =
   { types: type_replacement Path.Map.t;
     modules: Path.t Path.Map.t;
     modtypes: module_type Path.Map.t;
-    modargs: module_type Path.Map.t;
     for_saving: bool;
     loc: Location.t option;
   }
@@ -39,7 +38,6 @@ let identity =
   { types = Path.Map.empty;
     modules = Path.Map.empty;
     modtypes = Path.Map.empty;
-    modargs = Path.Map.empty;
     for_saving = false;
     loc = None;
   }
@@ -52,9 +50,6 @@ let add_type_function id ~params ~body s =
 
 let add_module_path id p s = { s with modules = Path.Map.add id p s.modules }
 let add_module id p s = add_module_path (Pident id) p s
-let add_module_arg id p mty s =
-  let s = add_module id p s in
-  { s with modargs = Path.Map.add (Pident id) mty s.modargs }
 
 let add_modtype_path p ty s = { s with modtypes = Path.Map.add p ty s.modtypes }
 let add_modtype id ty s = add_modtype_path (Pident id) ty s
@@ -747,7 +742,6 @@ and compose s1 s2 =
   { types = merge_path_maps (type_replacement s2) s1.types s2.types;
     modules = merge_path_maps (module_path s2) s1.modules s2.modules;
     modtypes = merge_path_maps (modtype Keep s2) s1.modtypes s2.modtypes;
-    modargs = merge_path_maps (modtype Keep s2) s1.modargs s2.modargs;
     for_saving = s1.for_saving || s2.for_saving;
     loc = keep_latest_loc s1.loc s2.loc;
   }
