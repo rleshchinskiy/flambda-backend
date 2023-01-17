@@ -19,24 +19,8 @@ open Asttypes
 open Path
 open Types
 
-let rl_tracing = Option.is_some (Sys.getenv_opt "RL_TRACING")
-
 let freshen ~scope mty =
   Subst.modtype (Rescope scope) Subst.identity mty
-
-(*
-let add_sig_item env =
-  let open Subst.Lazy in
-  function
-  | SigL_module(id, pres, md, _, _) ->
-      Env.add_module_declaration_lazy ~update_summary:false id pres md env
-
-  | SigL_modtype(id, decl, _) ->
-      Env.add_modtype_lazy ~update_summary:false id decl env
-      (* Need to add the module type in case it is manifest *)
-
-  | _ -> env
-*)
 
 let sig_item_id =
   let open Subst.Lazy in
@@ -150,32 +134,14 @@ let add_with_to_sig_item mc item =
   match mc, item with
   | Modc_module mty, SigL_module(id, pres, md, rs, vis) ->
     let mty = match md.mdl_type with
-      | MtyL_alias _ as mty ->
-          (* if rl_tracing then Format.printf "RL__IGNORE %a@." Printtyp.ident id ; *)
-          mty
-      | _ ->
-          (* if rl_tracing then Format.printf "RL__APPLY %a@." Printtyp.ident id ; *)
-          mty
+      | MtyL_alias _ as mty -> mty
+      | _ -> mty
     in
     let str = {md with mdl_type = mty}
     in
-      (*
-      if rl_debugging then (
-        Format.printf "@[<hv 2>constrain@ %a@ %a@]@."
-          Printtyp.modtype (force_modtype md.mdl_type)
-          Printtyp.modtype (force_modtype str.mdl_type)
-      );
-      *)
-      SigL_module (id, pres, str, rs, vis)
+    SigL_module (id, pres, str, rs, vis)
 
   | Modc_type p, SigL_type(id, decl, rs, vis) ->
-      (*
-      if rl_debugging then (
-        Format.printf "@[<hv 2>renaming %a to %a@]@."
-          Printtyp.ident id
-          Printtyp.path p
-      );
-      *)
       let manif = 
             Some(Btype.newgenty(Tconstr(p, decl.type_params, ref Mnil)))
       in
@@ -202,9 +168,7 @@ let rec apply_with_to_sig_item ns mc item =
     | [s], SigL_type(_, {type_kind = Type_abstract}, _, _) when name = s^"#row" ->
         None
     | s :: ns, SigL_module(id, pres, md, rs, vis) when name = s ->
-        (* if rl_tracing then Format.printf "RL__DESCEND %a@." Printtyp.ident id ; *)
-        (* RL FIXME: ignore aliases *)
-        let md = { md with mdl_type = apply_with ns mc md.mdl_type (* Subst.Lazy.MtyL_with (md.mdl_type, ns, mc) *) }
+        let md = { md with mdl_type = apply_with ns mc md.mdl_type }
         in
         Some (SigL_module(id, pres, md, rs, vis))
     | _ -> Some (item)
@@ -212,24 +176,13 @@ let rec apply_with_to_sig_item ns mc item =
   new_item
 
 and reduce_with ns mc mty =
-  (* if rl_tracing then Format.printf "REDUCE_WITH %s@." (String.concat "." ns) ; *)
   let open Subst.Lazy in
   match mty with
   | MtyL_signature sg ->
     let items = Subst.Lazy.force_signature_once sg in
-    (* if rl_tracing then (
-      let ss = List.map sig_item_id items |> List.map Ident.name in
-      Format.printf "REDUCE_WITH_SIG %s@." (String.concat " ; " ss);
-    ) ; *)
     let sg = List.filter_map (apply_with_to_sig_item ns mc) items
-    |> Subst.Lazy.of_signature_items
-    in
-    (*
-    let sg = Subst.Lazy.force_signature_once sg
-      |> List.filter_map (apply_with_to_sig_item ns mc)
       |> Subst.Lazy.of_signature_items
     in
-    *)
     Some (MtyL_signature sg)
 
 | MtyL_functor _ ->
@@ -259,7 +212,6 @@ let rec reduce_lazy ?(rescope=false) ~aliases env mty =
         in
         Some mty
       with Not_found ->
-        if rl_tracing then Format.printf "NOT FOUND: %a@." Path.print p ;
         None
       end
   | MtyL_alias path when aliases ->
@@ -285,10 +237,6 @@ let rec reduce_lazy ?(rescope=false) ~aliases env mty =
       begin match reduce_with ns mc base with
       | Some mty -> Some mty
       | None ->
-        (*
-        reduce_lazy ~rescope:true ~aliases env base
-        |> Option.map (apply_with ns mc)
-        *)
         let fapply mty = 
             let scope = Ctype.create_scope () in
             let mty = Subst.Lazy.modtype (Subst.Rescope scope) Subst.identity mty in
@@ -296,18 +244,6 @@ let rec reduce_lazy ?(rescope=false) ~aliases env mty =
         in
           reduce_lazy ~rescope ~aliases env base
           |> Option.map fapply
-        (*
-        begin match reduce_lazy ~rescope:true ~aliases env base with
-        | Some base -> Some (apply_with ns mc base)
-          (*
-          begin match reduce_with ns mc base with
-          | Some mty -> Some mty
-          | None -> Some (MtyL_with (base, ns, mc))
-          end
-          *)
-        | None -> None
-        end
-        *)
       end
   | MtyL_signature _ | MtyL_functor _ | MtyL_alias _ -> None
 
@@ -607,15 +543,8 @@ let rec nondep_mty_with_presence env va ids pres mty =
          path. For now, let's just drop such paths? *)
       let pres,mty = nondep_mty_with_presence env va ids pres mty
       in
-      let mty = match Path.find_free_opt ids p with
-        | Some _ ->
-            mty
-            (*
-            let q = Env.normalize_module_path None env p in
-            Format.printf "OOOPS %a@ %a@ %a@." Printtyp.path q Printtyp.modtype mmm Printtyp.modtype mty;
-            raise (Ctype.Nondep_cannot_erase id)
-            *)
-        | None -> strengthen ~aliasable mty p
+      let mty =
+        if Path.exists_free ids p then mty else strengthen ~aliasable mty p
       in
       pres,mty
   | Mty_with _ -> assert false (* RL FIXME: What should we do here? *)
@@ -699,8 +628,8 @@ let rec enrich_modtype env p mty =
   match expand env mty with
     Mty_signature sg ->
       Mty_signature(List.map (enrich_item env p) sg)
-  | _ -> mty
-      (* RL FIXME: do we need to enrich types in Mty_with? *)
+  | _ ->
+      mty
 
 and enrich_item env p = function
     Sig_type(id, decl, rs, priv) ->
@@ -743,7 +672,7 @@ let rec no_code_needed_mod env pres mty =
   match pres with
   | Mp_absent -> true
   | Mp_present -> begin
-        match scrape env mty with
+      match scrape env mty with
         Mty_ident _ -> false
       | Mty_signature sg -> no_code_needed_sig env sg
       | Mty_functor _ -> false
