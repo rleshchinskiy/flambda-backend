@@ -21,29 +21,6 @@ open Types
 
 let rl_tracing = Option.is_some (Sys.getenv_opt "RL_TRACING")
 
-(*
-let rl_with = true || Option.is_some (Sys.getenv_opt "RL_WITH")
-(*
-let rl_with = true
-*)
-
-let rl_simplify = true || Option.is_some (Sys.getenv_opt "RL_SIMPLIFY")
-*)
-
-(*
-let rl_pr8548 = 
-  let sfx p s =
-    let m = String.length p in
-    let n = String.length s in
-    n >= m && String.sub s (n-m) m = p
-  in
-  Array.exists (sfx "pr8548.ml") Sys.argv
-*)
-
-(*
-let rl_expanding = ref false
-*)
-
 let freshen ~scope mty =
   Subst.modtype (Rescope scope) Subst.identity mty
 

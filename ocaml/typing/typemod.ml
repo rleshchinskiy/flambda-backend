@@ -24,18 +24,6 @@ open Format
 let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
 let rl_tracing = Option.is_some (Sys.getenv_opt "RL_TRACING")
 
-
-type rl_with =
-  | Rl_with_none
-  | Rl_with_unstrengthened
-  | Rl_with_strengthened
-
-let rl_with = match Sys.getenv_opt "RL_WITH" with
-  | _ when true -> Rl_with_unstrengthened
-  | None -> Rl_with_none
-  | Some "s" -> Rl_with_strengthened
-  | Some _ -> Rl_with_unstrengthened
-
 let () = Includemod_errorprinter.register ()
 
 module Sig_component_kind = Shape.Sig_component_kind
@@ -776,25 +764,6 @@ let merge_constraint initial_env loc sg lid constr =
     match
       Signature_group.replace_in_place (patch_item constr namelist env sg) sg
     with
-    (*
-    | Some (x,sg) ->
-        let nom = match constr, rl_with with
-        | _, Rl_with_none -> None
-        | With_module wm, _ ->             
-            let mty = match rl_with, x with
-              | Rl_with_none, _ -> None
-              | Rl_with_unstrengthened, (_, _, _, Some (_,mty)) ->
-                  Some mty
-              | Rl_with_unstrengthened, _ -> None
-              | Rl_with_strengthened, _ ->
-                  Some wm.md.md_type
-            in
-            Option.map (fun mty ->
-              (namelist, Nominal.Modc_module (* Mtype.strengthen ~aliasable:false mty wm.path *) mty)) mty
-        | _, _ -> None
-        in
-        x, nom, sg
-    *)
     | Some x -> x
     | None -> raise(Error(loc, env, With_no_component lid.txt))
   in
@@ -1495,13 +1464,9 @@ and transl_modtype_aux env smty =
       let body = transl_modtype env sbody in
       let init_sg = extract_sig env sbody.pmty_loc body.mty_type in
       let remove_aliases = has_remove_aliases_attribute smty.pmty_attributes in
-      let init_withs = match rl_with with
-        | Rl_with_none -> None
-        | _ -> Some []
-      in
       let (rev_tcstrs, rev_withs, final_sg) =
         List.fold_left (transl_with ~loc:smty.pmty_loc env remove_aliases)
-        ([],init_withs,init_sg) constraints in
+        ([], Some [], init_sg) constraints in
       let scope = Ctype.create_scope () in
       let mty = match body.mty_type, rev_withs with
         | (Mty_ident _ | Mty_with _) as mty, Some rev_withs  ->
