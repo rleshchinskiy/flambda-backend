@@ -196,21 +196,12 @@ and apply_with ns mc mty =
   | Some mty -> mty
   | None -> Subst.Lazy.MtyL_with (mty,ns,mc)
 
-let rec reduce_lazy ?(rescope=false) ~aliases env mty =
+let rec reduce_lazy ~aliases env mty =
   let open Subst.Lazy in
   match mty with
     MtyL_ident p ->
       begin try
-        let mty = Env.find_modtype_expansion_lazy p env in
-        let mty = 
-          if rescope
-            then
-              let scope = Ctype.create_scope () in
-              Subst.Lazy.modtype (Subst.Rescope scope) Subst.identity mty
-            else
-              mty
-        in
-        Some mty
+        Some (Env.find_modtype_expansion_lazy p env)
       with Not_found ->
         None
       end
@@ -228,7 +219,7 @@ let rec reduce_lazy ?(rescope=false) ~aliases env mty =
       begin match reduce_strengthen_lazy ~aliasable mty p with
       | Some mty -> Some mty
       | None ->
-        begin match reduce_lazy ~rescope ~aliases env mty with
+        begin match reduce_lazy ~aliases env mty with
         | Some mty -> Some (strengthen_lazy ~aliasable mty p)
         | None -> None
         end
@@ -242,14 +233,14 @@ let rec reduce_lazy ?(rescope=false) ~aliases env mty =
             let mty = Subst.Lazy.modtype (Subst.Rescope scope) Subst.identity mty in
             apply_with ns mc mty
         in
-          reduce_lazy ~rescope ~aliases env base
+          reduce_lazy ~aliases env base
           |> Option.map fapply
       end
   | MtyL_signature _ | MtyL_functor _ | MtyL_alias _ -> None
 
-let rec scrape_lazy ?(rescope=false) ?(aliases=false) env mty =
-  match reduce_lazy ~rescope ~aliases env mty with
-  | Some mty -> scrape_lazy ~rescope ~aliases env mty
+let rec scrape_lazy ?(aliases=false) env mty =
+  match reduce_lazy ~aliases env mty with
+  | Some mty -> scrape_lazy ~aliases env mty
   | None -> mty
   
 let reduce_lazy env mty = reduce_lazy ~aliases:false env mty
