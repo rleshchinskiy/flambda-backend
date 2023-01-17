@@ -460,7 +460,7 @@ module Lazy_types = struct
     | MtyL_strengthen of modtype * Path.t * bool
     | MtyL_with of modtype * string list * module_constraint
 
-  and module_constraint = modtype Nominal.module_constraint
+  and module_constraint = modtype Generic.module_constraint
 
   and modtype_declaration =
     {
@@ -566,12 +566,12 @@ and force_module_decl md =
     md_attributes = md.mdl_attributes;
     md_loc = md.mdl_loc;
     md_uid = md.mdl_uid }
-and lazy_module_constraint c = Nominal.map_module_constraint lazy_modtype c
+and lazy_module_constraint c = Generic.map_module_constraint lazy_modtype c
 
-and force_module_constraint c = Nominal.map_module_constraint force_modtype c
+and force_module_constraint c = Generic.map_module_constraint force_modtype c
 
 and subst_lazy_module_constraint scoping s =
-  let open Types.Nominal in
+  let open Types.Generic in
   function
     | Modc_module mty -> Modc_module (subst_lazy_modtype scoping s mty)
     | Modc_type p -> Modc_type (type_path s p)

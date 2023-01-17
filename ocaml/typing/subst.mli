@@ -106,7 +106,7 @@ module Lazy : sig
     | MtyL_strengthen of modtype * Path.t * bool
     | MtyL_with of modtype * string list * module_constraint
 
-  and module_constraint = modtype Nominal.module_constraint
+  and module_constraint = modtype Generic.module_constraint
 
   and modtype_declaration =
     {

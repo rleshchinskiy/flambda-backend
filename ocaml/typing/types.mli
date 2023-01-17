@@ -598,7 +598,7 @@ type visibility =
   | Exported
   | Hidden
 
-module Nominal : sig
+module Generic : sig
   type 'a module_constraint =
     | Modc_module of 'a
     | Modc_type of Path.t
@@ -615,7 +615,7 @@ type module_type =
   | Mty_strengthen of module_type * Path.t * bool
   | Mty_with of module_type * string list * module_constraint
 
-and module_constraint = module_type Nominal.module_constraint
+and module_constraint = module_type Generic.module_constraint
 
 and functor_parameter =
   | Unit

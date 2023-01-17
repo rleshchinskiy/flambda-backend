@@ -388,9 +388,10 @@ let type_iterators =
         it.it_path p
     | Mty_with (mty, _, constr) ->
         it.it_module_type it mty;
+        let open Types.Generic in
         match constr with
-          | Nominal.Modc_module mt -> it.it_module_type it mt
-          | (Nominal.Modc_type p | Nominal.Modc_modtype p) -> it.it_path p
+          | Modc_module mt -> it.it_module_type it mt
+          | Modc_type p | Modc_modtype p -> it.it_path p
   
   and it_class_type it = function
       Cty_constr (p, tyl, cty) ->

@@ -715,7 +715,7 @@ let merge_constraint initial_env loc sg lid constr =
                   Printtyp.modtype mty
               ;
               (* Some (mty, newmd.md_type) *)
-              Some ([s], Nominal.Modc_module newmd.md_type)
+              Some ([s], Generic.Modc_module newmd.md_type)
           | _ ->
             if rl_tracing && not remove_aliases then (
               Format.printf "@[<hv 2>RL not none %s@ %a@ %a@ %a@."
@@ -1993,7 +1993,7 @@ let rec nongen_modtype env f = function
       nongen_modtype env f body
   | Mty_strengthen (mty,_ ,_) -> nongen_modtype env f mty
   | Mty_with (mty,_,mc) ->
-      let open Nominal in
+      let open Generic in
       let nongen_constraint = function
       (* RL FIXME: It's possible that the expansion of a type with constraints
           doesn't contain non-gen tyvars even if the individual components do.
@@ -3037,10 +3037,12 @@ let rec normalize_modtype = function
   | Mty_functor(_param, body) -> normalize_modtype body
   | Mty_strengthen (mty,_,_) -> normalize_modtype mty
   | Mty_with (mty,_,mc) ->
-      let normalize_module_constraint = function
-      | Nominal.Modc_module mty -> normalize_modtype mty
-      | Nominal.Modc_type _ -> ()
-      | Nominal.Modc_modtype _ -> ()
+      let normalize_module_constraint =
+        let open Generic in
+        function
+        | Modc_module mty -> normalize_modtype mty
+        | Modc_type _ -> ()
+        | Modc_modtype _ -> ()
       in
       normalize_modtype mty ;
       normalize_module_constraint mc

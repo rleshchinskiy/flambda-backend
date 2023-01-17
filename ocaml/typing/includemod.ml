@@ -666,7 +666,7 @@ and shortcut env subst mty1 mty2 =
         false
     | _, _ -> false
   and shallow_equal_constraints mc1 mc2 =
-    let open Nominal in
+    let open Generic in
     match mc1, mc2 with
     | Modc_modtype p1, Modc_modtype p2 ->
         equal_modtype_paths env p1 subst p2
@@ -677,7 +677,7 @@ and shortcut env subst mty1 mty2 =
     | _, _ -> false
   in
   let shortcut_constraint c1 c2 =
-    let open Nominal in
+    let open Generic in
     match c1, c2 with
     | Modc_modtype p1, Modc_modtype p2 ->
         equal_modtype_paths env p1 subst p2

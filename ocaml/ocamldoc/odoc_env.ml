@@ -214,7 +214,7 @@ let subst_module_type env t =
     | Mty_strengthen (mt,p,a) ->
         Mty_strengthen (iter mt,p,a)
     | Mty_with (mt,ns,mc) ->
-        Mty_with (iter mt, ns, Nominal.map_module_constraint iter mc)
+        Mty_with (iter mt, ns, Generic.map_module_constraint iter mc)
     | Mty_alias _
     | Mty_signature _ ->
         t
