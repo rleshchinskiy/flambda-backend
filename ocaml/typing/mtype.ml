@@ -894,7 +894,8 @@ let expand_module_path ~strengthen ~aliasable env path =
     let md = Env.find_module_lazy ~alias:true path env in
     (* RL FIXME: Why do we need to scrape here? If we don't, we get warnings about unused
        value declarations *)
-    let mty = scrape_lazy env md.mdl_type in
+       let mty = md.mdl_type in
+       (* let mty = scrape_lazy env md.mdl_type in *)
     let mty = strengthen_lazy ~aliasable mty path in
     Subst.Lazy.force_modtype mty
   else

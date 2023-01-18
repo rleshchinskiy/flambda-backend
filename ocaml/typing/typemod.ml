@@ -2294,6 +2294,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
       let path =
         Env.lookup_module_path ~load:(not alias) ~loc:smod.pmod_loc lid.txt env
       in
+      if rl_debugging then Format.printf "type_module_aux %a@." Printtyp.path path ;
       let md = { mod_desc = Tmod_ident (path, lid);
                  mod_type = Mty_alias path;
                  mod_env = env;
@@ -2310,6 +2311,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
           let mty = Mtype.expand_module_path
               ~strengthen:sttn ~aliasable env path
           in
+          if rl_debugging then Format.printf "expanded %a@." Printtyp.modtype mty ;
           match mty with
           | Mty_alias p1 when not alias ->
               let p1 = Env.normalize_module_path (Some smod.pmod_loc) env p1 in

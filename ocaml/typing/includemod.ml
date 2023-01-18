@@ -642,6 +642,24 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
           Error (Error.Mt_core Error.Not_an_alias)
       | _, _ -> Error (Error.Mt_core Abstract_module_type)
     in
+    let red =
+      match Mtype.reduce env mty1 with
+      | Some mty1 -> Some (mty1,mty2)
+      | None ->
+          let mty2_red =
+            Subst.Lazy.of_modtype mty2
+            |> Subst.Lazy.modtype Keep subst
+            |> Mtype.reduce_lazy env
+            |> Option.map Subst.Lazy.force_modtype
+          in
+          match mty2_red with
+          | Some mty2 -> Some (mty1,mty2)
+          | None -> None
+    in
+    match red with
+    | Some (mty1,mty2) -> try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
+    | None -> mismatch mty1 mty2
+    (*
     let mty1_red = Mtype.reduce env mty1 in
     let mty2_red =
       Subst.Lazy.of_modtype mty2
@@ -656,6 +674,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
         let mty2 = Option.value mty2_red ~default:mty2 in
         try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape
     end
+    *)
 
 (* Functor parameters *)
 
