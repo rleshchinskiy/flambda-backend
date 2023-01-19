@@ -129,10 +129,9 @@ and strengthen_lazy_decl ~aliasable md p =
   | mty -> {md with mdl_type = strengthen_lazy ~aliasable mty p}
 
 let add_with_to_sig_item mc item =
-  let open Types.Generic in
   let open Subst.Lazy in
   match mc, item with
-  | Modc_module mty, SigL_module(id, pres, md, rs, vis) ->
+  | ModcL_module mty, SigL_module(id, pres, md, rs, vis) ->
     let mty = match md.mdl_type with
       | MtyL_alias _ as mty -> mty
       | _ -> mty
@@ -141,7 +140,7 @@ let add_with_to_sig_item mc item =
     in
     SigL_module (id, pres, str, rs, vis)
 
-  | Modc_type p, SigL_type(id, decl, rs, vis) ->
+  | ModcL_type p, SigL_type(id, decl, rs, vis) ->
       let manif = 
             Some(Btype.newgenty(Tconstr(p, decl.type_params, ref Mnil)))
       in
@@ -153,7 +152,7 @@ let add_with_to_sig_item mc item =
       in
       SigL_type(id, decl, rs, vis)
 
-  | Modc_modtype p, SigL_modtype(id, decl, vis) ->
+  | ModcL_modtype p, SigL_modtype(id, decl, vis) ->
       let newdecl = {decl with mtdl_type = Some(MtyL_ident p)} in
       SigL_modtype(id, newdecl, vis)
 
@@ -285,8 +284,8 @@ let rec expand_paths_lazy paths env =
       | None ->
           let base = expand_paths_lazy paths env base in
           let mc = match mc with
-          | Generic.Modc_module mty ->
-              Generic.Modc_module (expand_paths_lazy paths env mty)
+          | ModcL_module mty ->
+              ModcL_module (expand_paths_lazy paths env mty)
           | mc -> mc
           in
           MtyL_with (base,ns,mc)
@@ -416,12 +415,16 @@ let rec make_aliases_absent pres mty =
       in
       pres, MtyL_strengthen (res,p,a)
   | MtyL_with (mty, ns, mc) ->
-      let recurse mty =
-        let _, mty = make_aliases_absent pres mty in mty
+      let mc = match mc with
+        | ModcL_module mty -> 
+            let _, mty = make_aliases_absent pres mty
+            in
+            ModcL_module mty
+        | mc -> mc
       in
       let pres, mty = make_aliases_absent pres mty
       in
-      pres, MtyL_with (mty, ns, Generic.map_module_constraint recurse mc)
+      pres, MtyL_with (mty, ns, mc)
 
 and make_aliases_absent_sig sg =
   let open Subst.Lazy in

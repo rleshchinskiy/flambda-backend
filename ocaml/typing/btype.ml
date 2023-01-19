@@ -388,7 +388,6 @@ let type_iterators =
         it.it_path p
     | Mty_with (mty, _, constr) ->
         it.it_module_type it mty;
-        let open Types.Generic in
         match constr with
           | Modc_module mt -> it.it_module_type it mt
           | Modc_type p | Modc_modtype p -> it.it_path p

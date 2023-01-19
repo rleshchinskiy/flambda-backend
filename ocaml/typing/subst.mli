@@ -106,7 +106,10 @@ module Lazy : sig
     | MtyL_strengthen of modtype * Path.t * bool
     | MtyL_with of modtype * string list * module_constraint
 
-  and module_constraint = modtype Generic.module_constraint
+  and module_constraint =
+    | ModcL_module of modtype
+    | ModcL_type of Path.t
+    | ModcL_modtype of Path.t
 
   and modtype_declaration =
     {

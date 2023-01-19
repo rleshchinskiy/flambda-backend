@@ -329,17 +329,6 @@ type visibility =
   | Exported
   | Hidden
 
-module Generic = struct
-  type 'a module_constraint =
-    | Modc_module of 'a
-    | Modc_type of Path.t
-    | Modc_modtype of Path.t
-
-  let map_module_constraint f = function
-    | Modc_module t -> Modc_module (f t)
-    | (Modc_type _ | Modc_modtype _) as x -> x
-end
-
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
@@ -348,7 +337,10 @@ type module_type =
   | Mty_strengthen of module_type * Path.t * bool
   | Mty_with of module_type * string list * module_constraint
 
-and module_constraint = module_type Generic.module_constraint
+and module_constraint =
+  | Modc_module of module_type
+  | Modc_type of Path.t
+  | Modc_modtype of Path.t
 
 and functor_parameter =
   | Unit

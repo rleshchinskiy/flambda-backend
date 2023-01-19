@@ -1966,9 +1966,7 @@ let rec tree_of_modtype ?(ellipsis=false) = function
         Omty_with (tree_of_modtype ~ellipsis base, cs, expanded)
       end
 
-and tree_of_module_with ?(ellipsis=false) =
-  let open Types.Generic in
-  function
+and tree_of_module_with ?(ellipsis=false) = function
   | ns, Modc_module mty ->
       ns, Omodc_module (tree_of_modtype ~ellipsis mty)
   | ns, Modc_type p ->

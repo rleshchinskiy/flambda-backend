@@ -509,7 +509,6 @@ let shallow_modtypes ~in_eq env subst mty1 mty2 =
         && cmp_constraints ~incl cs1 cs2
     | _, _ -> false
   and cmp_constraint mc1 mc2 =
-    let open Generic in
     match mc1, mc2 with
     | Modc_module mty1, Modc_module mty2 ->
         cmp_modtypes ~incl:in_eq mty1 mty2

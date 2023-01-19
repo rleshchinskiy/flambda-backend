@@ -598,15 +598,6 @@ type visibility =
   | Exported
   | Hidden
 
-module Generic : sig
-  type 'a module_constraint =
-    | Modc_module of 'a
-    | Modc_type of Path.t
-    | Modc_modtype of Path.t
-
-  val map_module_constraint : ('a -> 'b) -> 'a module_constraint -> 'b module_constraint
-end
-
 type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
@@ -615,7 +606,10 @@ type module_type =
   | Mty_strengthen of module_type * Path.t * bool
   | Mty_with of module_type * string list * module_constraint
 
-and module_constraint = module_type Generic.module_constraint
+and module_constraint =
+  | Modc_module of module_type
+  | Modc_type of Path.t
+  | Modc_modtype of Path.t
 
 and functor_parameter =
   | Unit
