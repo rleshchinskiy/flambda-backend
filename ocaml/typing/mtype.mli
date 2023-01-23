@@ -38,6 +38,9 @@ val strengthen: aliasable:bool -> module_type -> Path.t -> module_type
 val strengthen_decl:
   aliasable:bool -> module_declaration -> Path.t -> module_declaration
 
+val apply_with:
+  string list -> module_constraint -> module_type -> module_type
+
 val expand_module_path:
   strengthen:bool -> aliasable:bool -> Env.t -> Path.t -> module_type
 

@@ -164,13 +164,14 @@ let rec apply_with_to_sig_item ns mc item =
   let new_item = match ns, item with
     | [s], _ when name = s ->
         Some (add_with_to_sig_item mc item)
-    | [s], SigL_type(_, {type_kind = Type_abstract}, _, _) when name = s^"#row" ->
+    | [_], SigL_type(_, {type_kind = Type_abstract}, _, _)
+          when Btype.is_row_name name ->
         None
     | s :: ns, SigL_module(id, pres, md, rs, vis) when name = s ->
-        let md = { md with mdl_type = apply_with ns mc md.mdl_type }
+        let md = { md with mdl_type = apply_with_lazy ns mc md.mdl_type }
         in
         Some (SigL_module(id, pres, md, rs, vis))
-    | _ -> Some (item)
+    | _ -> Some item
   in
   new_item
 
@@ -190,7 +191,7 @@ and reduce_with ns mc mty =
 | MtyL_alias p -> Some (MtyL_alias p)
 | MtyL_strengthen _ | MtyL_ident _ | MtyL_with _ -> None
 
-and apply_with ns mc mty =
+and apply_with_lazy ns mc mty =
   match reduce_with ns mc mty with
   | Some mty -> mty
   | None -> Subst.Lazy.MtyL_with (mty,ns,mc)
@@ -230,7 +231,7 @@ let rec reduce_lazy ~aliases env mty =
         let fapply mty = 
             let scope = Ctype.create_scope () in
             let mty = Subst.Lazy.modtype (Subst.Rescope scope) Subst.identity mty in
-            apply_with ns mc mty
+            apply_with_lazy ns mc mty
         in
           reduce_lazy ~aliases env base
           |> Option.map fapply
@@ -354,8 +355,14 @@ let rec simplify mty =
   | MtyL_strengthen (mty,p,aliasable) ->
       strengthen_lazy ~aliasable (simplify mty) p
   | MtyL_with (mty,ns,mc) ->
-      apply_with ns mc (simplify mty)
+      apply_with_lazy ns mc (simplify mty)
   | mty -> mty
+
+let apply_with ns mc mty =
+  Mty_with (mty,ns,mc)
+  |> Subst.Lazy.of_modtype
+  |> simplify
+  |> Subst.Lazy.force_modtype
 
 let rec sig_make_manifest sg =
   match sg with

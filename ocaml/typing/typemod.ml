@@ -754,8 +754,9 @@ let merge_constraint initial_env loc sg lid constr =
               (* A module alias cannot be refined, so keep it
                  and just check that the constraint is correct *)
               item, None
-          | (Mty_ident _ | Mty_with _) as mty, _, Some (ns,mc) ->
-              let newmd = {md with md_type = Mty_with (mty,ns,mc)} in
+          | _, _, Some (ns,mc) ->
+              let mty = Mtype.apply_with ns mc md.md_type in
+              let newmd = {md with md_type = mty} in
               Sig_module(id, Mp_present, newmd, rs, priv), Some (s::ns, mc)
           | _ ->
               let newmd = {md with md_type = Mty_signature newsg} in
