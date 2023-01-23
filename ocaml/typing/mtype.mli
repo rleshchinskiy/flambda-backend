@@ -32,6 +32,10 @@ val scrape_for_type_of:
 val freshen: scope:int -> module_type -> module_type
         (* Return an alpha-equivalent copy of the given module type
            where bound identifiers are fresh. *)
+val strengthen_lazy:
+  aliasable:bool -> Subst.Lazy.modtype -> Path.t -> Subst.Lazy.modtype
+        (* Strengthen abstract type components relative to the
+          given path. *)
 val strengthen: aliasable:bool -> module_type -> Path.t -> module_type
         (* Strengthen abstract type components relative to the
            given path. *)
@@ -41,8 +45,6 @@ val strengthen_decl:
 val apply_with:
   string list -> module_constraint -> module_type -> module_type
 
-val expand_module_path:
-  strengthen:bool -> aliasable:bool -> Env.t -> Path.t -> module_type
 
 val expand_paths_sig:
   Path.Set.t -> Env.t -> signature -> signature

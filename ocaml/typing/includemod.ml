@@ -1310,9 +1310,21 @@ let strengthened_module_decl ~loc ~aliasable env ~mark md1 path1 md2 =
   | Error mdiff ->
       raise (Error(env,Error.(In_Module_type mdiff)))
 
+let expand_module_path ~strengthen ~aliasable env path =
+  if strengthen then
+    let md = Env.find_module_lazy ~alias:true path env in
+    (* RL FIXME: Why do we need to scrape here? If we don't, we get warnings about unused
+        value declarations *)
+        let mty = md.mdl_type in
+        (* let mty = scrape_lazy env md.mdl_type in *)
+    let mty = Mtype.strengthen_lazy ~aliasable mty path in
+    Subst.Lazy.force_modtype mty
+  else
+    (Env.find_module path env).md_type
+
 let expand_module_alias ~strengthen env path =
   try
-    Mtype.expand_module_path ~strengthen ~aliasable:true env path
+    expand_module_path ~strengthen ~aliasable:true env path
   with Not_found -> raise (Error(env,In_Expansion(Error.Unbound_module_path path)))
 
 let check_modtype_equiv ~loc env id mty1 mty2 =

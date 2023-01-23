@@ -2308,7 +2308,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         if alias && aliasable then
           (Env.add_required_global path env; md)
         else begin
-          let mty = Mtype.expand_module_path
+          let mty = Includemod.expand_module_path
               ~strengthen:sttn ~aliasable env path
           in
           if rl_debugging then Format.printf "expanded %a@." Printtyp.modtype mty ;

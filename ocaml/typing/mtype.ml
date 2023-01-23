@@ -897,16 +897,3 @@ let lower_nongen nglev mty =
   let it = {type_iterators with it_type_expr} in
   it.it_module_type it mty;
   it.it_module_type unmark_iterators mty
-
-
-let expand_module_path ~strengthen ~aliasable env path =
-  if strengthen then
-    let md = Env.find_module_lazy ~alias:true path env in
-    (* RL FIXME: Why do we need to scrape here? If we don't, we get warnings about unused
-       value declarations *)
-       let mty = md.mdl_type in
-       (* let mty = scrape_lazy env md.mdl_type in *)
-    let mty = strengthen_lazy ~aliasable mty path in
-    Subst.Lazy.force_modtype mty
-  else
-    (Env.find_module path env).md_type
