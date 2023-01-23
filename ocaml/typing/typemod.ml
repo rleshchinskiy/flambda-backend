@@ -646,9 +646,32 @@ let merge_constraint initial_env loc sg lid constr =
           id row_id newdecl sig_decl;
         begin match constr with
           With_type _ ->
+            let pkind = function
+              | Type_abstract -> "abstract"
+              | Type_record  _-> "record"
+              | Type_variant _ -> "variant"
+              | Type_open -> "open"
+            in
+            let modc = match sig_decl.type_params, sig_decl.type_manifest, newdecl.type_kind with
+              | [], _, Type_abstract ->
+                if rl_debugging then Format.printf "Modc_type %s %a@."
+                  (pkind newdecl.type_kind)
+                  (Printtyp.type_declaration id) newdecl ;
+                Some ([s], Modc_type newdecl)
+              | _ ->
+                let pm ppf = function
+                  | None -> Format.fprintf ppf "NONE"
+                  | Some e -> Printtyp.raw_type_expr ppf e
+                in
+                if rl_debugging then Format.printf "Modc_type NOPE %s %a@ %a@."
+                  (pkind newdecl.type_kind)
+                  pm sig_decl.type_manifest
+                (Printtyp.type_declaration id) newdecl ;
+                None
+            in
             return ~ghosts
               ~replace_by:(Some(Sig_type(id, newdecl, rs, priv)))
-              ((Pident id, lid, Twith_type tdecl), None)
+              ((Pident id, lid, Twith_type tdecl), modc)
         | (* With_typesubst *) _ ->
             real_ids := [Pident id];
             return ~ghosts ~replace_by:None
@@ -1458,6 +1481,9 @@ and transl_modtype_aux env smty =
         smty.pmty_attributes
   | Pmty_with(sbody, constraints) ->
       let body = transl_modtype env sbody in
+      if rl_debugging then Format.printf "PMTY_WITH %i %a@."
+          (List.length constraints)
+          Printtyp.modtype body.mty_type ;
       let init_sg = extract_sig env sbody.pmty_loc body.mty_type in
       let remove_aliases = has_remove_aliases_attribute smty.pmty_attributes in
       let (rev_tcstrs, rev_withs, final_sg) =
@@ -1468,8 +1494,14 @@ and transl_modtype_aux env smty =
         | (Mty_ident _ | Mty_with _) as mty, Some rev_withs  ->
             List.fold_right (fun (ns,mc) mty -> Mty_with (mty,ns,mc))
               rev_withs mty
-        | _ -> Mty_signature final_sg
+        | _, Some _ ->
+            if rl_debugging then Format.printf "DROPPING rev_withs for %a@." Printtyp.modtype body.mty_type ;
+            Mty_signature final_sg
+        | _ ->
+            if rl_debugging then Format.printf "NO rev_withs@." ;
+            Mty_signature final_sg
       in
+      if rl_debugging then Format.printf "returning %a@." Printtyp.modtype mty ;
       mkmty (Tmty_with ( body, List.rev rev_tcstrs))
         (Mtype.freshen ~scope mty) env loc
         smty.pmty_attributes
@@ -1500,6 +1532,8 @@ and transl_with ~loc env remove_aliases (rev_tcstrs,rev_withs,sg) constr =
   let ((tcstr,wc),sg) = merge_constraint env loc sg lid with_info in
   let rev_withs = match wc, rev_withs with
     | Some w, Some rev_withs -> Some (w :: rev_withs)
+    | Some _, None ->
+        if rl_debugging then Format.printf "DROPPING with@." ; None
     | _ -> None
   in
   (tcstr :: rev_tcstrs, rev_withs, sg)
@@ -1590,6 +1624,8 @@ and transl_signature env (sg : Parsetree.signature) =
         in
         mksig (Tsig_exception ext) env loc, [tsg], newenv
     | Psig_module pmd ->
+        if rl_debugging then Format.printf "PSIG_MODULE %s@."
+            (Option.value pmd.pmd_name.txt ~default:"<>");
         let scope = Ctype.create_scope () in
         let tmty =
           Builtin_attributes.warning_scope pmd.pmd_attributes

@@ -513,9 +513,29 @@ let shallow_modtypes ~in_eq env subst mty1 mty2 =
     | Modc_module mty1, Modc_module mty2 ->
         cmp_modtypes ~incl:in_eq mty1 mty2
     | Modc_modtype p1, Modc_modtype p2 ->
-          equal_modtype_paths env p1 subst p2
+        equal_modtype_paths env p1 subst p2
+    (*
     | Modc_type p1, Modc_type p2 ->
         equal_type_paths p1 p2
+    *)
+    | Modc_type td1, Modc_type td2 ->
+        begin match td1.type_manifest, td2.type_manifest with
+        | None, None -> true (* RL FIXME: should never happen? *)
+        | Some _, None -> in_eq (* RL FIXME: should never happen? *)
+        | Some t1, Some t2 ->
+            let rec same_desc r1 r2 = match r1, r2 with
+              | Tvar v1, Tvar v2 -> v1 = v2
+              | Ttuple ts1, Ttuple ts2 ->
+                  List.equal same_type ts1 ts2
+              | Tconstr (p1,ts1,_), Tconstr (p2,ts2,_) ->
+                  equal_type_paths p1 p2 && List.equal same_type ts1 ts2
+              | _ -> false
+            and same_type t1 t2 = same_desc (get_desc t1) (get_desc t2)
+            in
+            same_type t1 t2
+        | _ -> false
+        end
+        (* RL FIXME *)
     | _, _ -> false
   in
   cmp_modtypes ~incl:true mty1 mty2

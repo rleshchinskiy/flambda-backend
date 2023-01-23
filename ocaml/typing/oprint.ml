@@ -655,10 +655,11 @@ and print_out_module_with ppf =
       fprintf ppf "module %s : %a"
         (dotted ns)
         print_out_module_type mty
-  | ns, Omodc_type p ->
-      fprintf ppf "type %s = %a"
-        (dotted ns)
-        print_ident p
+  | ns, Omodc_type td ->
+      print_out_type_decl
+        "type"
+        ppf
+        { td with otype_name = dotted ns }
   | ns, Omodc_modtype p ->
       fprintf ppf "module type %s = %a"
         (dotted ns)

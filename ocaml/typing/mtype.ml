@@ -140,6 +140,7 @@ let add_with_to_sig_item mc item =
     in
     SigL_module (id, pres, str, rs, vis)
 
+  (*
   | ModcL_type p, SigL_type(id, decl, rs, vis) ->
       let manif = 
             Some(Btype.newgenty(Tconstr(p, decl.type_params, ref Mnil)))
@@ -151,7 +152,10 @@ let add_with_to_sig_item mc item =
         { decl with type_manifest = manif }
       in
       SigL_type(id, decl, rs, vis)
+  *)
 
+  | ModcL_type td, SigL_type(id, _, rs, vis) ->
+      SigL_type (id, td, rs, vis)
   | ModcL_modtype p, SigL_modtype(id, decl, vis) ->
       let newdecl = {decl with mtdl_type = Some(MtyL_ident p)} in
       SigL_modtype(id, newdecl, vis)

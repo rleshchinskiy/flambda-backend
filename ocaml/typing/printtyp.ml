@@ -1376,7 +1376,7 @@ let prepare_type_constructor_arguments = function
   | Cstr_tuple l -> List.iter (fun (ty, _) -> prepare_type ty) l
   | Cstr_record l -> List.iter (fun l -> prepare_type l.ld_type) l
 
-let rec tree_of_type_decl id decl =
+let rec tree_of_type_decl name id decl =
 
   reset_except_context();
 
@@ -1404,8 +1404,8 @@ let rec tree_of_type_decl id decl =
           (* Special hack to hide variant name *)
           match get_desc ty with
             Tvariant row ->
-              begin match row_name row with
-                Some (Pident id', _) when Ident.same id id' ->
+              begin match id, row_name row with
+                Some id, Some (Pident id', _) when Ident.same id id' ->
                   newgenty (Tvariant (set_row_name row None))
               | _ -> ty
               end
@@ -1464,16 +1464,15 @@ let rec tree_of_type_decl id decl =
           else (NoVariance, NoInjectivity))
         decl.type_params decl.type_variance
     in
-    (rl_ident_name id,
-     List.map2 (fun ty cocn -> type_param (tree_of_typexp Type ty), cocn)
-       params vari)
+    List.map2 (fun ty cocn -> type_param (tree_of_typexp Type ty), cocn)
+      params vari
   in
   let tree_of_manifest ty1 =
     match ty_manifest with
     | None -> ty1
     | Some ty -> Otyp_manifest (tree_of_typexp Type ty, ty1)
   in
-  let (name, args) = type_defined decl in
+  let args = type_defined decl in
   let constraints = tree_of_constraints params in
   let ty, priv, unboxed =
     match decl.type_kind with
@@ -1549,7 +1548,7 @@ let label ppf l =
   !Oprint.out_label ppf (tree_of_label l)
 
 let tree_of_type_declaration id decl rs =
-  Osig_type (tree_of_type_decl id decl, tree_of_rec rs)
+  Osig_type (tree_of_type_decl (rl_ident_name id) (Some id) decl, tree_of_rec rs)
 
 let type_declaration id ppf decl =
   !Oprint.out_sig_item ppf (tree_of_type_declaration id decl Trec_first)
@@ -1969,8 +1968,9 @@ let rec tree_of_modtype ?(ellipsis=false) = function
 and tree_of_module_with ?(ellipsis=false) = function
   | ns, Modc_module mty ->
       ns, Omodc_module (tree_of_modtype ~ellipsis mty)
-  | ns, Modc_type p ->
-      ns, Omodc_type (tree_of_path Type p)
+  | ns, Modc_type td ->
+      ns, Omodc_type (tree_of_type_decl (String.concat "." ns) None td)
+      (*tree_of_path Type p*)
   | ns, Modc_modtype p ->
       ns, Omodc_modtype (tree_of_path Module_type p)
 
