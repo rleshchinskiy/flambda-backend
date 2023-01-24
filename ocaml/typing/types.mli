@@ -609,6 +609,7 @@ type module_type =
 and module_constraint =
   | Modc_module of module_type
   | Modc_type of Path.t
+  | Modc_modtype of Path.t
 
 and functor_parameter =
   | Unit
@@ -657,6 +658,7 @@ and ext_status =
   | Text_exception
 
 val item_visibility : signature_item -> visibility
+
 
 (* Constructor and record label descriptions inserted held in typing
    environments *)

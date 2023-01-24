@@ -187,6 +187,9 @@ and apply_with_to_sig_item ns mc item =
             in
             SigL_type(id, decl, rs, vis)
 
+        | ModcL_modtype p, SigL_modtype(id, decl, vis) ->
+            let newdecl = {decl with mtdl_type = Some(MtyL_ident p)} in
+            SigL_modtype(id, newdecl, vis)
         | _, sigelt -> sigelt
       in
       Some item
@@ -427,7 +430,7 @@ let rec make_aliases_absent pres mty =
       pres, Mty_strengthen (res,p,a)
   | Mty_with (mty, ns, mc) ->
       let mc = match mc with
-        | Modc_module mty ->
+        | Modc_module mty -> 
             let _, mty = make_aliases_absent pres mty
             in
             Modc_module mty
@@ -528,6 +531,7 @@ let rec nondep_mty_with_presence env va ids pres mty =
       | None -> pres, mty
       end
   | Mty_signature sg ->
+      let env = Env.add_signature sg env in
       let mty = Mty_signature(nondep_sig env va ids sg) in
       pres, mty
   | Mty_functor(Unit, res) ->
@@ -555,7 +559,7 @@ let rec nondep_mty_with_presence env va ids pres mty =
       in
       pres,mty
   | Mty_with _ -> assert false (* RL FIXME: What should we do here? *)
-
+  
 and nondep_mty env va ids mty =
   snd (nondep_mty_with_presence env va ids Mp_present mty)
 
@@ -793,16 +797,21 @@ let collect_arg_paths mty =
   let it_path p = paths := Path.Set.union (get_arg_paths p) !paths
   and it_signature_item it si =
     type_iterators.it_signature_item it si;
+    let module_type id = function
+      | Mty_alias p ->
+          bindings := Ident.add id p !bindings
+      | Mty_signature sg ->
+          List.iter
+            (function Sig_module (id', _, _, _, _) ->
+                subst :=
+                  Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
+              | _ -> ())
+            sg
+      (* RL FIXME: This is probably very wrong for with constraints? *)
+      | _ -> ()
+    in
     match si with
-    | Sig_module (id, _, {md_type=Mty_alias p}, _, _) ->
-        bindings := Ident.add id p !bindings
-    | Sig_module (id, _, {md_type=Mty_signature sg}, _, _) ->
-        List.iter
-          (function Sig_module (id', _, _, _, _) ->
-              subst :=
-                Path.Map.add (Pdot (Pident id, Ident.name id')) id' !subst
-            | _ -> ())
-          sg
+    | Sig_module (id, _, {md_type=mty}, _, _) -> module_type id mty
     | _ -> ()
   in
   let it = {type_iterators with it_path; it_signature_item} in

@@ -21,6 +21,9 @@ open Parsetree
 open Types
 open Format
 
+let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+let rl_tracing = Option.is_some (Sys.getenv_opt "RL_TRACING")
+
 let () = Includemod_errorprinter.register ()
 
 module Sig_component_kind = Shape.Sig_component_kind
@@ -686,6 +689,11 @@ let merge_constraint initial_env loc sg lid constr =
     | Sig_module(id, pres, md, rs, priv), [s],
       With_module {lid=lid'; md=md'; path; remove_aliases}
       when Ident.name id = s ->
+        if rl_debugging then (
+          Format.printf "@[<hv 2>With_module %a@ sigis@ %a@]@."
+            Printtyp.modtype md'.md_type
+            Printtyp.signature sg_for_env
+        );
         let sig_env = Env.add_signature sg_for_env outer_sig_env in
         let mty = md'.md_type in
         let mty = Mtype.scrape_for_type_of ~remove_aliases sig_env mty in
@@ -694,10 +702,28 @@ let merge_constraint initial_env loc sg lid constr =
         let coercion = Includemod.modtypes  ~mark:Mark_both ~loc sig_env
                  newmd.md_type md.md_type
         in
+        if rl_debugging then (
+          Format.printf "/With_module@."
+        );
         let modc = match coercion with
           | Tcoerce_none when not remove_aliases ->
+              if rl_tracing then
+                Format.printf "@[<hv 2>RL with module %s@ %a@ %a@ %a@."
+                  s
+                  Printtyp.modtype md.md_type
+                  Printtyp.modtype newmd.md_type
+                  Printtyp.modtype mty
+              ;
+              (* Some (mty, newmd.md_type) *)
               Some ([s], Modc_module newmd.md_type)
           | _ ->
+            if rl_tracing && not remove_aliases then (
+              Format.printf "@[<hv 2>RL not none %s@ %a@ %a@ %a@."
+                s
+                Printtyp.modtype md.md_type
+                Printtyp.modtype newmd.md_type
+                Printtyp.modtype mty
+              );
             None
         in
         return
@@ -937,6 +963,7 @@ and approx_sig env ssg =
             | Mty_alias _ -> Mp_absent
             | _ -> Mp_present
           in
+          if rl_tracing then Format.printf "Psig_module %a@." Printtyp.modtype md.Types.md_type ;
           let id, newenv =
             Env.enter_module_declaration ~scope (Option.get pmd.pmd_name.txt)
               pres md env
@@ -1974,6 +2001,7 @@ let rec nongen_modtype env f = function
           as necessary to get rid of non-gen tyvars? *)
           | Modc_module mty -> nongen_modtype env f mty
       | Modc_type _ -> false
+      | Modc_modtype _ -> false
       in
       nongen_modtype env f mty || nongen_constraint mc
 
@@ -2267,6 +2295,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
       let path =
         Env.lookup_module_path ~load:(not alias) ~loc:smod.pmod_loc lid.txt env
       in
+      if rl_debugging then Format.printf "type_module_aux %a@." Printtyp.path path ;
       let md = { mod_desc = Tmod_ident (path, lid);
                  mod_type = Mty_alias path;
                  mod_env = env;
@@ -2283,6 +2312,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
           let mty = Mtype.find_type_of_module
               ~strengthen:sttn ~aliasable env path
           in
+          if rl_debugging then Format.printf "expanded %a@." Printtyp.modtype mty ;
           match mty with
           | Mty_alias p1 when not alias ->
               let p1 = Env.normalize_module_path (Some smod.pmod_loc) env p1 in
@@ -2318,7 +2348,9 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         | Unit ->
           Unit, Types.Unit, env, Shape.for_unnamed_functor_param, false
         | Named (param, smty) ->
+          if rl_debugging then Format.printf "Pmod_functor@." ;
           let mty = transl_modtype_functor_arg env smty in
+          if rl_debugging then Format.printf "Pmod_functor x %a@." Printtyp.modtype mty.mty_type;
           let scope = Ctype.create_scope () in
           let (id, newenv, var) =
             match param.txt with
@@ -3011,6 +3043,7 @@ let rec normalize_modtype = function
       let normalize_module_constraint = function
         | Modc_module mty -> normalize_modtype mty
         | Modc_type _ -> ()
+        | Modc_modtype _ -> ()
       in
       normalize_modtype mty ;
       normalize_module_constraint mc

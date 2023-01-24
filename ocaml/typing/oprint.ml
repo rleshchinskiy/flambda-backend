@@ -612,7 +612,7 @@ and print_out_functor ppf t =
 and print_simple_out_module_type ppf =
   function
     Omty_abstract -> ()
-  | Omty_ident id -> fprintf ppf "%a" print_ident id
+  | Omty_ident id -> print_ident ppf id
   | Omty_signature sg ->
      begin match sg with
        | [] -> fprintf ppf "sig end"
@@ -622,17 +622,20 @@ and print_simple_out_module_type ppf =
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple
-  | Omty_strengthen (mty, id, aliasable) ->
+  | Omty_strengthen (mty, id, aliasable, mty_alt) ->
+    let print_alt ppf = Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type) in
     if aliasable
       then
-        fprintf ppf "(module %a :@ %a)"
+        fprintf ppf "(module %a :@ %a%a)"
           print_ident id
           print_simple_out_module_type mty
+          print_alt mty_alt
       else
-        fprintf ppf "(%a/%a)"
+        fprintf ppf "(%a/%a%a)"
           print_simple_out_module_type mty
           print_ident id
-  | Omty_with (mty, cs) ->
+          print_alt mty_alt
+  | Omty_with (mty, cs, mty_alt) ->
     let rec print_constrs sep ppf = function
       | [] -> ()
       | c :: cs ->
@@ -641,9 +644,10 @@ and print_simple_out_module_type ppf =
           print_out_module_with c
           (print_constrs "and") cs
     in
-      fprintf ppf "@[<hv 2>(%a%a)@;<1 -2>@]"
+      fprintf ppf "@[<hv 2>(%a%a%a)@;<1 -2>@]"
         print_simple_out_module_type mty
         (print_constrs "with") cs
+        (fun ppf -> Option.iter (fprintf ppf "@ ==> @ %a" print_out_module_type)) mty_alt
 and print_out_module_with ppf =
   let dotted ns = String.concat "." ns in
   function
@@ -653,6 +657,10 @@ and print_out_module_with ppf =
         print_out_module_type mty
   | ns, Omodc_type p ->
       fprintf ppf "type %s = %a"
+        (dotted ns)
+        print_ident p
+  | ns, Omodc_modtype p ->
+      fprintf ppf "module type %s = %a"
         (dotted ns)
         print_ident p
 and print_out_signature ppf =

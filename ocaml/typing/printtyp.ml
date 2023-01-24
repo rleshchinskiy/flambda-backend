@@ -28,6 +28,24 @@ open Outcometree
 module String = Misc.Stdlib.String
 module Int = Misc.Stdlib.Int
 
+let rl_print_uniques = Option.is_some (Sys.getenv_opt "RL_PRINT_UNIQUES")
+
+let rl_ident_name = if rl_print_uniques then Ident.unique_name else  Ident.name
+
+type rl_print_with =
+  | Rlpw_with_only
+  | Rlpw_expand_only
+  | Rlpw_both
+
+let rl_print_with =
+  match Sys.getenv_opt "RL_PRINT_WITH" with
+  | Some "w" -> Rlpw_with_only
+  | Some "b" -> Rlpw_both
+  | Some "x" -> Rlpw_expand_only
+  | _ -> Rlpw_expand_only
+
+let rl_simple_abstract = Option.is_some (Sys.getenv_opt "RL_SIMPLE_ABSTRACT")
+
 (* Print a long identifier *)
 
 let rec longident ppf = function
@@ -294,9 +312,9 @@ let env_ident namespace name =
 (** Associate a name to the identifier [id] within [namespace] *)
 let ident_name_simple namespace id =
   if not !enabled || fuzzy_id namespace id then
-    Out_name.create (Ident.name id)
+    Out_name.create (rl_ident_name id)
   else
-  let name = Ident.name id in
+  let name = rl_ident_name id in
   match M.find name (get namespace) with
   | Uniquely_associated_to (id',r) when Ident.same id id' ->
       r
@@ -1446,7 +1464,7 @@ let rec tree_of_type_decl id decl =
           else (NoVariance, NoInjectivity))
         decl.type_params decl.type_variance
     in
-    (Ident.name id,
+    (rl_ident_name id,
      List.map2 (fun ty cocn -> type_param (tree_of_typexp Type ty), cocn)
        params vari)
   in
@@ -1884,13 +1902,13 @@ let with_hidden_items ids f =
 let add_sigitem env x =
   Env.add_signature (Signature_group.flatten x) env
 
+
 let expand_module_type =
   ref ((fun _env _mty -> assert false) :
       Env.t -> module_type -> module_type)
 
 let rec tree_of_modtype ?(ellipsis=false) = function
-  | Mty_ident p ->
-      Omty_ident (tree_of_path Module_type p)
+  | Mty_ident p -> Omty_ident (tree_of_path Module_type p)
   | Mty_signature sg ->
       Omty_signature (if ellipsis then [Osig_ellipsis]
                       else tree_of_signature sg)
@@ -1903,30 +1921,40 @@ let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
   | Mty_strengthen _ | Mty_with _ as mty ->
-      let mty = if !Clflags.short_types
-        then mty
-        else !expand_module_type !printing_env mty
+      let expanded = match !Clflags.short_types, rl_print_with with
+        | true, _ | _, Rlpw_with_only -> None
+        | _ ->
+          match !expand_module_type !printing_env mty with
+          | Mty_strengthen (mty,_,_) when rl_simple_abstract -> Some mty
+          | Mty_strengthen _ | Mty_with _ -> None
+          | mty -> Some mty
       in
-      begin match mty with
-      | Mty_strengthen (mty, p, aliasable) ->
-          Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, aliasable)
-      | Mty_with _ as mty ->
-          let rec collect cs = function
-            | Mty_with (mty,ns,mc) ->
-                collect ((ns,mc) :: cs) mty
-            | mty -> mty, cs
-          in
-          let base, cs = collect [] mty in
-          let cs = List.map (tree_of_module_with ~ellipsis) cs in
-          Omty_with (tree_of_modtype ~ellipsis base, cs)
-      | mty -> tree_of_modtype ~ellipsis mty
-      end
+      let full exp = match mty with
+        | Mty_strengthen (mty,p,aliasable) ->
+            Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, aliasable, None)
+        | Mty_with _ ->
+            let rec collect cs = function
+              | Mty_with (mty,ns,mc) ->
+                  collect ((ns,mc) :: cs) mty
+              | mty -> mty, cs
+            in
+            let base, cs = collect [] mty in
+            let cs = List.map (tree_of_module_with ~ellipsis) cs in
+            Omty_with (tree_of_modtype ~ellipsis base, cs, exp)
+        | _ -> tree_of_modtype ~ellipsis mty
+      in
+      match !Clflags.short_types, rl_print_with, expanded with
+        | false, Rlpw_expand_only, Some mty -> tree_of_modtype ~ellipsis mty
+        | true, _, _ | _, Rlpw_with_only, _ -> full None
+        | _ -> full (Option.map (tree_of_modtype ~ellipsis) expanded)
 
 and tree_of_module_with ?(ellipsis=false) = function
   | ns, Modc_module mty ->
       ns, Omodc_module (tree_of_modtype ~ellipsis mty)
   | ns, Modc_type p ->
       ns, Omodc_type (tree_of_path Type p)
+  | ns, Modc_modtype p ->
+      ns, Omodc_modtype (tree_of_path Module_type p)
 
 and tree_of_functor_parameter = function
   | Unit ->
@@ -1998,10 +2026,10 @@ and tree_of_modtype_declaration id decl =
     | None -> Omty_abstract
     | Some mty -> tree_of_modtype mty
   in
-  Osig_modtype (Ident.name id, mty)
+  Osig_modtype (rl_ident_name id, mty)
 
 and tree_of_module id ?ellipsis mty rs =
-  Osig_module (Ident.name id, tree_of_modtype ?ellipsis mty, tree_of_rec rs)
+  Osig_module (rl_ident_name id, tree_of_modtype ?ellipsis mty, tree_of_rec rs)
 
 let rec functor_parameters ~sep custom_printer = function
   | [] -> ignore

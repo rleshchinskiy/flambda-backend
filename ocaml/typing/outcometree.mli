@@ -119,11 +119,12 @@ type out_module_type =
   | Omty_ident of out_ident
   | Omty_signature of out_sig_item list
   | Omty_alias of out_ident
-  | Omty_strengthen of out_module_type * out_ident * bool
-  | Omty_with of out_module_type * out_module_with list
+  | Omty_strengthen of out_module_type * out_ident * bool * out_module_type option
+  | Omty_with of out_module_type * out_module_with list * out_module_type option
 and out_module_constraint =
   | Omodc_module of out_module_type
   | Omodc_type of out_ident
+  | Omodc_modtype of out_ident
 and out_module_with = string list * out_module_constraint
 and out_sig_item =
   | Osig_class of

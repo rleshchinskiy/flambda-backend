@@ -19,6 +19,8 @@ open Misc
 open Typedtree
 open Types
 
+let rl_debugging = Option.is_some (Sys.getenv_opt "RL_DEBUGGING")
+
 type pos =
   | Module of Ident.t
   | Modtype of Ident.t
@@ -152,7 +154,13 @@ let type_declarations ~loc env ~mark subst id decl1 decl2 =
     Includecore.type_declarations ~loc env ~mark
       (Ident.name id) decl1 (Path.Pident id) decl2
   with
-  | None -> Ok Tcoerce_none
+  | None ->
+      if rl_debugging then (
+        Format.printf "@[<hv 2>type_declarations yes@ %a@ %a@]@."
+          (Printtyp.type_declaration id) decl1
+          (Printtyp.type_declaration id) decl2
+      );
+      Ok Tcoerce_none
   | Some err ->
       Error Error.(Core(Type_declarations (diff decl1 decl2 err)))
 
@@ -504,6 +512,8 @@ let shallow_modtypes ~in_eq env subst mty1 mty2 =
     match mc1, mc2 with
     | Modc_module mty1, Modc_module mty2 ->
         cmp_modtypes ~incl:in_eq mty1 mty2
+    | Modc_modtype p1, Modc_modtype p2 ->
+        equal_modtype_paths env p1 subst p2
     | Modc_type p1, Modc_type p2 ->
         equal_type_paths p1 p2
     | _, _ -> false
@@ -524,8 +534,20 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
     | Mty_alias _ -> true
     | _ -> false
   in
+  if rl_debugging then (
+    Format.printf "@[<hv 2>try_modtypes@ %a@ %a@ (%a)@]@."
+      Printtyp.modtype mty1
+      Printtyp.modtype mty2
+      Printtyp.modtype (Subst.modtype Subst.Keep subst mty2)
+  );
+
   match mty1, mty2 with
   | _ when shallow_modtypes ~in_eq env subst mty1 mty2 ->
+      if rl_debugging then (
+        Format.printf "@[<hv 2>shortcut@ %a@ %a@]@."
+          Printtyp.modtype mty1
+          Printtyp.modtype mty2
+      );
       Ok (Tcoerce_none, orig_shape)
 
   | (Mty_alias p1, _) when not (is_alias mty2) -> begin
@@ -684,6 +706,12 @@ and functor_param ~in_eq ~loc env ~mark subst param1 param2 =
 
 and strengthened_modtypes ~in_eq ~loc ~aliasable env ~mark
     subst mty1 path1 mty2 shape =
+  if rl_debugging then (
+    Format.printf "@[<hv 2>strengthened_modtypes %a@ %a@ %a@]@."
+      Printtyp.path path1
+      Printtyp.modtype mty1
+      Printtyp.modtype mty2
+  );
   let mty1 = Mtype.strengthen ~aliasable mty1 path1 in
   modtypes ~in_eq ~loc env ~mark subst mty1 mty2 shape
 
@@ -1002,6 +1030,11 @@ let () =
    interface. *)
 
 let compunit env ~mark impl_name impl_sig intf_name intf_sig unit_shape =
+  if rl_debugging then (
+    Format.printf "@[<hv 2>compunit@ %a@ %a@]@."
+      Printtyp.signature impl_sig
+      Printtyp.signature intf_sig
+  );
   match
     signatures ~in_eq:false ~loc:(Location.in_file impl_name) env ~mark
       Subst.identity impl_sig intf_sig unit_shape
