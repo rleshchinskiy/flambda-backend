@@ -622,6 +622,16 @@ and print_simple_out_module_type ppf =
   | Omty_alias id -> fprintf ppf "(module %a)" print_ident id
   | Omty_functor _ as non_simple ->
      fprintf ppf "(%a)" print_out_module_type non_simple
+  | Omty_strengthen (mty, id, aliasable) ->
+    if aliasable
+      then
+        fprintf ppf "(module %a :@ %a)"
+          print_ident id
+          print_simple_out_module_type mty
+      else
+        fprintf ppf "(%a/%a)"
+          print_simple_out_module_type mty
+          print_ident id
 and print_out_signature ppf =
   function
     [] -> ()

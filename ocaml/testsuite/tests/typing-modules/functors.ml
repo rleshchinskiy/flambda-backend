@@ -543,7 +543,7 @@ module F : functor (X : a) -> sig type t end
 Line 6, characters 13-19:
 6 |     type t = F(X).t
                  ^^^^^^
-Error: Modules do not match: a/1 is not included in a/2
+Error: Modules do not match: (a/1/P.X) is not included in a/2
      Line 3, characters 2-15:
        Definition of module type a/1
      Line 1, characters 0-13:
@@ -1237,15 +1237,17 @@ end
 module U = F(PF)(PF)(PF)
 [%%expect {|
 module F :
-  functor (X : sig type witness module type t module M : t end) -> X.t
+  functor (X : sig type witness module type t module M : t end) -> (X.t/X.M)
 module PF :
   sig
     type witness
     module type t =
-      functor (X : sig type witness module type t module M : t end) -> X.t
+      functor (X : sig type witness module type t module M : t end) ->
+        (X.t/X.M)
     module M = F
   end
-module U : PF.t
+module U :
+  functor (X : sig type witness module type t module M : t end) -> (X.t/X.M)
 |}]
 
 module W = F(PF)(PF)(PF)(PF)(PF)(F)
@@ -1267,7 +1269,7 @@ Error: The functor application is ill-typed.
        6. Modules do not match:
             F :
             functor (X : sig type witness module type t module M : t end) ->
-              X.t
+              (X.t/X.M)
           is not included in
             $T6 = sig type witness module type t module M : t end
           Modules do not match:
@@ -1527,7 +1529,7 @@ Error: Signature mismatch:
              sig type wrong end ->
                functor (X : sig module type T end) (Res : X.T) (Res :
                  X.T) (Res : X.T)
-               -> X.T
+               -> (X.T/Res)
          end
        is not included in
          sig
@@ -1657,7 +1659,7 @@ module type Ext = sig module type T module X : T end
 module AExt : sig module type T = A module X = A end
 module FiveArgsExt :
   sig module type T = ty -> ty -> ty -> ty -> ty -> sig end module X : T end
-module Bar : functor (W : A) (X : Ext) (Y : B) (Z : Ext) -> Z.T
+module Bar : functor (W : A) (X : Ext) (Y : B) (Z : Ext) -> (Z.T/Z.X)
 type fine = Bar(A)(FiveArgsExt)(B)(AExt).a
 |}]
 
