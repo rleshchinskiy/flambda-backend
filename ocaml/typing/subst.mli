@@ -108,6 +108,7 @@ module Lazy : sig
 
   and module_constraint =
     | ModcL_module of modtype
+    | ModcL_type of Path.t
 
   and modtype_declaration =
     {

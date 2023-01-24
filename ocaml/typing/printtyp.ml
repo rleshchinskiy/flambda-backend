@@ -1925,6 +1925,8 @@ let rec tree_of_modtype ?(ellipsis=false) = function
 and tree_of_module_with ?(ellipsis=false) = function
   | ns, Modc_module mty ->
       ns, Omodc_module (tree_of_modtype ~ellipsis mty)
+  | ns, Modc_type p ->
+      ns, Omodc_type (tree_of_path Type p)
 
 and tree_of_functor_parameter = function
   | Unit ->

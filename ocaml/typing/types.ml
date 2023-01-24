@@ -339,6 +339,7 @@ type module_type =
 
 and module_constraint =
   | Modc_module of module_type
+  | Modc_type of Path.t
 
 and functor_parameter =
   | Unit

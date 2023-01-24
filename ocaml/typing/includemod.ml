@@ -454,6 +454,12 @@ end
 
 (* Quickly compare module types without expanding them *)
 let shallow_modtypes ~in_eq env subst mty1 mty2 =
+  let equal_type_paths p1 p2 =
+    p1 = p2 ||
+    (let p1 = Env.normalize_type_path None env p1 in
+    let p2 = Env.normalize_type_path None env (Subst.type_path subst p2) in
+    Path.same p1 p2)
+  in
   let rec cmp_modtypes ~incl mty1 mty2 =
     match mty1, mty2 with
     | Mty_alias p1, Mty_alias p2 ->
@@ -498,6 +504,9 @@ let shallow_modtypes ~in_eq env subst mty1 mty2 =
     match mc1, mc2 with
     | Modc_module mty1, Modc_module mty2 ->
         cmp_modtypes ~incl:in_eq mty1 mty2
+    | Modc_type p1, Modc_type p2 ->
+        equal_type_paths p1 p2
+    | _, _ -> false
   in
   cmp_modtypes ~incl:true mty1 mty2
 

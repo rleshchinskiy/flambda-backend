@@ -462,6 +462,7 @@ module Lazy_types = struct
 
   and module_constraint =
     | ModcL_module of modtype
+    | ModcL_type of Path.t
 
   and modtype_declaration =
     {
@@ -570,12 +571,15 @@ and force_module_decl md =
 
 and lazy_module_constraint = function
   | Modc_module mty -> ModcL_module (lazy_modtype mty)
+  | Modc_type p -> ModcL_type p
 
 and force_module_constraint = function
   | ModcL_module mty -> Modc_module (force_modtype mty)
+  | ModcL_type p -> Modc_type p
 
 and subst_lazy_module_constraint scoping s = function
   | ModcL_module mty -> ModcL_module (subst_lazy_modtype scoping s mty)
+  | ModcL_type p -> ModcL_type (type_path s p)
 
 and lazy_modtype = function
   | Mty_ident p -> MtyL_ident p

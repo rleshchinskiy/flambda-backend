@@ -217,6 +217,7 @@ let subst_module_type env t =
         let mt = iter mt in
         let mc = match mc with
           | Modc_module mty -> Modc_module (iter mty)
+          | _ -> mc
         in
         Mty_with (mt,ns,mc)
     | Mty_alias _

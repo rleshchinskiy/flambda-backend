@@ -152,7 +152,7 @@ let rec reduce_with ns mc mty =
   match mty with
   | MtyL_signature sg ->
       let sg = Subst.Lazy.force_signature_once sg
-        |> List.map (apply_with_to_sig_item ns mc)
+        |> List.filter_map (apply_with_to_sig_item ns mc)
         |> Subst.Lazy.of_signature_items
       in
       Some (MtyL_signature sg)
@@ -165,7 +165,7 @@ and apply_with_to_sig_item ns mc item =
   let name = Ident.name (sig_item_id item) in
   match ns, item with
   | [s], _ when name = s ->
-      begin match mc, item with
+      let item = match mc, item with
         | ModcL_module mty, SigL_module(id, pres, md, rs, vis) ->
           let mdl_type = match md.mdl_type with
             | MtyL_alias _ -> md.mdl_type
@@ -174,14 +174,30 @@ and apply_with_to_sig_item ns mc item =
           let md = {md with mdl_type}
           in
           SigL_module (id, pres, md, rs, vis)
-      
+
+        | ModcL_type p, SigL_type(id, decl, rs, vis) ->
+            let manif =
+                  Some(Btype.newgenty(Tconstr(p, decl.type_params, ref Mnil)))
+            in
+            let decl =
+              if decl.type_kind = Type_abstract then
+              { decl with type_private = Public; type_manifest = manif }
+            else
+              { decl with type_manifest = manif }
+            in
+            SigL_type(id, decl, rs, vis)
+
         | _, sigelt -> sigelt
-      end
+      in
+      Some item
+  | [s], SigL_type(_, {type_kind = Type_abstract}, _, _)
+        when name = s^"#row" ->
+      None
   | s :: ns, SigL_module(id, pres, md, rs, vis) when name = s ->
       let md = { md with mdl_type = apply_with_lazy ns mc md.mdl_type }
       in
-      SigL_module(id, pres, md, rs, vis)
-  | _ -> item
+      Some (SigL_module(id, pres, md, rs, vis))
+  | _ -> Some item
 
 and apply_with_lazy ns mc mty =
   match reduce_with ns mc mty with
@@ -293,6 +309,7 @@ let rec expand_paths_lazy paths env =
           let mc = match mc with
           | ModcL_module mty ->
               ModcL_module (expand_paths_lazy paths env mty)
+          | mc -> mc
           in
           MtyL_with (base,ns,mc)
       end
@@ -414,6 +431,7 @@ let rec make_aliases_absent pres mty =
             let _, mty = make_aliases_absent pres mty
             in
             Modc_module mty
+        | mc -> mc
       in
       let pres, mty = make_aliases_absent pres mty
       in
