@@ -98,7 +98,7 @@ let rec module_path s path =
 let modtype_path s path =
       match Path.Map.find path s.modtypes with
       | Mty_ident p -> p
-      | Mty_alias _ | Mty_signature _ | Mty_functor _ | Mty_strengthen _ ->
+      | Mty_alias _ | Mty_signature _ | Mty_functor _ | Mty_strengthen _ | Mty_with _ ->
          fatal_error "Subst.modtype_path"
       | exception Not_found ->
          match path with
@@ -458,6 +458,10 @@ module Lazy_types = struct
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
     | MtyL_strengthen of modtype * Path.t * bool
+    | MtyL_with of modtype * string list * module_constraint
+
+  and module_constraint =
+    | ModcL_module of modtype
 
   and modtype_declaration =
     {
@@ -564,6 +568,15 @@ and force_module_decl md =
     md_loc = md.mdl_loc;
     md_uid = md.mdl_uid }
 
+and lazy_module_constraint = function
+  | Modc_module mty -> ModcL_module (lazy_modtype mty)
+
+and force_module_constraint = function
+  | ModcL_module mty -> Modc_module (force_modtype mty)
+
+and subst_lazy_module_constraint scoping s = function
+  | ModcL_module mty -> ModcL_module (subst_lazy_modtype scoping s mty)
+
 and lazy_modtype = function
   | Mty_ident p -> MtyL_ident p
   | Mty_signature sg ->
@@ -573,6 +586,7 @@ and lazy_modtype = function
      MtyL_functor (Named (id, lazy_modtype arg), lazy_modtype res)
   | Mty_alias p -> MtyL_alias p
   | Mty_strengthen (mty,p,a) -> MtyL_strengthen (lazy_modtype mty, p, a)
+  | Mty_with (mty, ns, mc) -> MtyL_with (lazy_modtype mty, ns, lazy_module_constraint mc)
 
 and subst_lazy_modtype scoping s = function
   | MtyL_ident p ->
@@ -602,6 +616,8 @@ and subst_lazy_modtype scoping s = function
       MtyL_alias (module_path s p)
   | MtyL_strengthen (mty,p,a) ->
       MtyL_strengthen (subst_lazy_modtype scoping s mty, module_path s p, a)
+  | MtyL_with (mty, ns, mc) ->
+      MtyL_with (subst_lazy_modtype scoping s mty, ns, subst_lazy_module_constraint scoping s mc)
 
 and force_modtype = function
   | MtyL_ident p -> Mty_ident p
@@ -614,6 +630,7 @@ and force_modtype = function
      Mty_functor (param, force_modtype res)
   | MtyL_alias p -> Mty_alias p
   | MtyL_strengthen (mty,p,a) -> Mty_strengthen (force_modtype mty, p, a)
+  | MtyL_with (mty, ns, mc) -> Mty_with (force_modtype mty, ns, force_module_constraint mc)
 
 and lazy_modtype_decl mtd =
   let mtdl_type = Option.map lazy_modtype mtd.mtd_type in
@@ -743,6 +760,7 @@ module Lazy = struct
   let of_signature sg = Lazy_backtrack.create_forced (S_eager sg)
   let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy sg)
   let of_signature_item = lazy_signature_item
+  let of_module_constraint = lazy_module_constraint
 
   let module_decl = subst_lazy_module_decl
   let modtype = subst_lazy_modtype

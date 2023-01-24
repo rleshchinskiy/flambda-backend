@@ -1920,7 +1920,7 @@ let rec components_of_module_maker
           fcomp_cache = Hashtbl.create 17;
           fcomp_subst_cache = Hashtbl.create 17 })
   | MtyL_alias p -> Error (No_components_alias p)
-  | MtyL_ident _ | MtyL_strengthen _ -> Error No_components_abstract
+  | MtyL_ident _ | MtyL_strengthen _ | MtyL_with _ -> Error No_components_abstract
 
 (* Insertion of bindings by identifier + path *)
 
@@ -2572,7 +2572,8 @@ let read_signature modname filename =
   let md = Subst.Lazy.force_module_decl mda.mda_declaration in
   match md.md_type with
   | Mty_signature sg -> sg
-  | Mty_ident _ | Mty_functor _ | Mty_alias _ | Mty_strengthen _ -> assert false
+  | Mty_ident _ | Mty_functor _ | Mty_alias _ | Mty_strengthen _
+  | Mty_with _ -> assert false
 
 let is_identchar_latin1 = function
   | 'A'..'Z' | 'a'..'z' | '_' | '\192'..'\214' | '\216'..'\246'

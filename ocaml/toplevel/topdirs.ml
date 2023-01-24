@@ -378,6 +378,7 @@ let trim_signature = function
              | item -> item)
            sg)
   | mty -> mty
+    (* RL FIXME: Is this right? Do we need to expand Mty_with? *)
 
 let show_prim to_sig ppf lid =
   let env = !toplevel_env in
@@ -569,7 +570,7 @@ let () =
                (if secretly_the_same_path env path new_path
                 then acc
                 else def Trec_not :: acc)
-         | Mty_ident _ | Mty_signature _ | Mty_functor _ | Mty_strengthen _ ->
+         | Mty_ident _ | Mty_signature _ | Mty_functor _ | Mty_strengthen _ | Mty_with _ ->
              List.rev (def (is_rec_module id md) :: acc)
        in
        accum_aliases path md []
@@ -593,7 +594,9 @@ let () =
                (if secretly_the_same_path env path new_path
                 then acc
                 else def :: acc)
-         | None | Some (Mty_alias _ | Mty_signature _ | Mty_functor _ | Mty_strengthen _) ->
+         | None
+         | Some (Mty_alias _ | Mty_signature _ | Mty_functor _
+                  | Mty_strengthen _ | Mty_with _) ->
              List.rev (def :: acc)
        in
        accum_defs path mtd []

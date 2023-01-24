@@ -104,6 +104,10 @@ module Lazy : sig
     | MtyL_functor of functor_parameter * modtype
     | MtyL_alias of Path.t
     | MtyL_strengthen of modtype * Path.t * bool
+    | MtyL_with of modtype * string list * module_constraint
+
+  and module_constraint =
+    | ModcL_module of modtype
 
   and modtype_declaration =
     {
@@ -137,6 +141,7 @@ module Lazy : sig
   val of_signature : Types.signature -> signature
   val of_signature_items : signature_item list -> signature
   val of_signature_item : Types.signature_item -> signature_item
+  val of_module_constraint : Types.module_constraint -> module_constraint
 
   val module_decl : scoping -> t -> module_decl -> module_decl
   val modtype : scoping -> t -> modtype -> modtype
