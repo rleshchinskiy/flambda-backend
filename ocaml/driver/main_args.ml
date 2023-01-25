@@ -539,6 +539,9 @@ let mk_short_paths f =
   "-short-paths", Arg.Unit f, " Shorten paths in types"
 ;;
 
+let mk_short_types f =
+  "-short-types", Arg.Unit f, " Don't expand types"
+
 let mk_stdin f =
   "-stdin", Arg.Unit f, " Read script from standard input"
 ;;
@@ -972,6 +975,7 @@ module type Common_options = sig
   val _no_rectypes : unit -> unit
   val _safe_string : unit -> unit
   val _short_paths : unit -> unit
+  val _short_types : unit -> unit
   val _strict_sequence : unit -> unit
   val _no_strict_sequence : unit -> unit
   val _strict_formats : unit -> unit
@@ -1046,6 +1050,7 @@ module type Compiler_options = sig
   val _without_runtime : unit -> unit
   val _safe_string : unit -> unit
   val _short_paths : unit -> unit
+  val _short_types : unit -> unit
   val _thread : unit -> unit
   val _v : unit -> unit
   val _verbose : unit -> unit
@@ -1273,6 +1278,7 @@ struct
     mk_without_runtime F._without_runtime;
     mk_safe_string F._safe_string;
     mk_short_paths F._short_paths;
+    mk_short_types F._short_types;
     mk_strict_sequence F._strict_sequence;
     mk_no_strict_sequence F._no_strict_sequence;
     mk_strict_formats F._strict_formats;
@@ -1351,6 +1357,7 @@ struct
     mk_no_rectypes F._no_rectypes;
     mk_safe_string F._safe_string;
     mk_short_paths F._short_paths;
+    mk_short_types F._short_types;
     mk_stdin F._stdin;
     mk_strict_sequence F._strict_sequence;
     mk_no_strict_sequence F._no_strict_sequence;
@@ -1484,6 +1491,7 @@ struct
     mk_safe_string F._safe_string;
     mk_shared F._shared;
     mk_short_paths F._short_paths;
+    mk_short_types F._short_types;
     mk_strict_sequence F._strict_sequence;
     mk_no_strict_sequence F._no_strict_sequence;
     mk_strict_formats F._strict_formats;
@@ -1606,6 +1614,7 @@ module Make_opttop_options (F : Opttop_options) = struct
     mk_S F._S;
     mk_safe_string F._safe_string;
     mk_short_paths F._short_paths;
+    mk_short_types F._short_types;
     mk_stdin F._stdin;
     mk_strict_sequence F._strict_sequence;
     mk_no_strict_sequence F._no_strict_sequence;
@@ -1691,6 +1700,7 @@ struct
     mk_no_rectypes F._no_rectypes;
     mk_safe_string F._safe_string;
     mk_short_paths F._short_paths;
+    mk_short_types F._short_types;
     mk_strict_sequence F._strict_sequence;
     mk_no_strict_sequence F._no_strict_sequence;
     mk_strict_formats F._strict_formats;
@@ -1784,6 +1794,7 @@ module Default = struct
     let _rectypes = set recursive_types
     let _safe_string = clear unsafe_string
     let _short_paths = clear real_paths
+    let _short_types = set short_types
     let _strict_formats = set strict_formats
     let _strict_sequence = set strict_sequence
     let _unboxed_types = set unboxed_types

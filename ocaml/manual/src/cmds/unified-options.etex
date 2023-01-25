@@ -669,6 +669,9 @@ warning messages. Identifier names starting with an underscore "_" or
 containing double underscores "__" incur a penalty of $+10$ when computing
 their length.
 
+\item["-short-types"]
+When printing a type, don't unfold delayed operations (like strengthening).
+
 \top{
 \item["-stdin"]
 Read the standard input as a script file rather than starting an

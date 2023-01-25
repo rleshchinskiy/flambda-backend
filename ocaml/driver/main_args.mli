@@ -39,6 +39,7 @@ module type Common_options = sig
   val _no_rectypes : unit -> unit
   val _safe_string : unit -> unit
   val _short_paths : unit -> unit
+  val _short_types : unit -> unit
   val _strict_sequence : unit -> unit
   val _no_strict_sequence : unit -> unit
   val _strict_formats : unit -> unit
@@ -113,6 +114,7 @@ module type Compiler_options = sig
   val _without_runtime : unit -> unit
   val _safe_string : unit -> unit
   val _short_paths : unit -> unit
+  val _short_types : unit -> unit
   val _thread : unit -> unit
   val _v : unit -> unit
   val _verbose : unit -> unit

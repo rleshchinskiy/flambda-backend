@@ -1903,7 +1903,11 @@ let rec tree_of_modtype ?(ellipsis=false) = function
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
   | Mty_strengthen _ as mty ->
-      begin match !expand_module_type !printing_env mty with
+      let mty = if !Clflags.short_types
+        then mty
+        else !expand_module_type !printing_env mty
+      in
+      begin match mty with
       | Mty_strengthen (mty, p, aliasable) ->
           Omty_strengthen (tree_of_modtype ~ellipsis mty, tree_of_path Module p, aliasable)
       | mty -> tree_of_modtype ~ellipsis mty

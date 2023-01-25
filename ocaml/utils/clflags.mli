@@ -95,6 +95,7 @@ val use_runtime : string ref
 val plugin : bool ref
 val principal : bool ref
 val real_paths : bool ref
+val short_types : bool ref
 val recursive_types : bool ref
 val strict_sequence : bool ref
 val strict_formats : bool ref
