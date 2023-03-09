@@ -238,7 +238,7 @@ module FieldMap = Map.Make(struct
 let item_ident_name =
   let open Subst.Lazy in
   function
-    SigL_value(id, d, _) -> (id, d.val_loc, field_desc Field_value id)
+    SigL_value(id, d, _) -> (id, d.vall_loc, field_desc Field_value id)
   | SigL_type(id, d, _, _) -> (id, d.type_loc, field_desc Field_type  id )
   | SigL_typext(id, d, _, _) ->
       let kind =
@@ -256,12 +256,16 @@ let item_ident_name =
 let is_runtime_component =
   let open Subst.Lazy in
   function
-  | SigL_value(_,{val_kind = Val_prim _}, _)
+  | SigL_value(_,d(* {val_kind = Val_prim _} *), _) ->
+    begin match d.vall_kind with
+    | Val_prim _ -> false
+    | _ -> true
+    end
   | SigL_type(_,_,_,_)
   | SigL_module(_,Mp_absent,_,_,_)
   | SigL_modtype(_,_,_)
   | SigL_class_type(_,_,_,_) -> false
-  | SigL_value(_,_,_)
+  (* | SigL_value(_,_,_) *)
   | SigL_typext(_,_,_,_)
   | SigL_module(_,Mp_present,_,_,_)
   | SigL_class(_,_,_,_) -> true
@@ -758,6 +762,8 @@ and signature_components :
       let id, item, shape_map, present_at_runtime =
         match sigi1, sigi2 with
         | SigL_value(id1, valdecl1, _) ,SigL_value(_id2, valdecl2, _) ->
+            let valdecl1 = Subst.Lazy.force_value_description valdecl1 in
+            let valdecl2 = Subst.Lazy.force_value_description valdecl2 in
             let item =
               value_descriptions ~loc env ~mark subst id1 valdecl1 valdecl2
             in

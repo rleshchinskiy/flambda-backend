@@ -33,7 +33,7 @@ type module_unbound_reason =
 
 type summary =
     Env_empty
-  | Env_value of summary * Ident.t * value_description
+  | Env_value of summary * Ident.t * Subst.Lazy.value_description
   | Env_type of summary * Ident.t * type_declaration
   | Env_extension of summary * Ident.t * extension_constructor
   | Env_module of summary * Ident.t * module_presence * Subst.Lazy.module_decl
@@ -292,6 +292,9 @@ val make_copy_of_types: t -> (t -> t)
 
 (* Insertion by identifier *)
 
+val add_value_lazy:
+    ?check:(string -> Warnings.t) -> ?mode:(Types.value_mode) ->
+    Ident.t -> Subst.Lazy.value_description -> t -> t
 val add_value:
     ?check:(string -> Warnings.t) -> ?mode:(Types.value_mode) ->
     Ident.t -> value_description -> t -> t
