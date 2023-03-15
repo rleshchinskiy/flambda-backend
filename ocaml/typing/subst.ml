@@ -569,13 +569,20 @@ and force_module_decl md =
     md_loc = md.mdl_loc;
     md_uid = md.mdl_uid }
 
+and lazy_functor_parameter = function
+| Types.Unit -> Unit
+| Types.Named (id, mty) -> Named (id, lazy_modtype mty)
+
+and force_functor_parameter = function
+| Unit -> Types.Unit
+| Named (id, mty) -> Types.Named (id, force_modtype mty)
+
 and lazy_modtype = function
   | Mty_ident p -> MtyL_ident p
   | Mty_signature sg ->
      MtyL_signature (Lazy_backtrack.create_forced (S_eager sg))
-  | Mty_functor (Unit, mty) -> MtyL_functor (Unit, lazy_modtype mty)
-  | Mty_functor (Named (id, arg), res) ->
-     MtyL_functor (Named (id, lazy_modtype arg), lazy_modtype res)
+  | Mty_functor (param, mty) ->
+     MtyL_functor (lazy_functor_parameter param, lazy_modtype mty)
   | Mty_alias p -> MtyL_alias p
 
 and subst_lazy_modtype scoping s = function
@@ -609,11 +616,7 @@ and force_modtype = function
   | MtyL_ident p -> Mty_ident p
   | MtyL_signature sg -> Mty_signature (force_signature sg)
   | MtyL_functor (param, res) ->
-     let param : Types.functor_parameter =
-       match param with
-       | Unit -> Unit
-       | Named (id, mty) -> Named (id, force_modtype mty) in
-     Mty_functor (param, force_modtype res)
+     Mty_functor (force_functor_parameter param, force_modtype res)
   | MtyL_alias p -> Mty_alias p
 
 and lazy_modtype_decl mtd =
@@ -751,6 +754,7 @@ module Lazy = struct
   let of_signature sg = Lazy_backtrack.create_forced (S_eager sg)
   let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy sg)
   let of_signature_item = lazy_signature_item
+  let of_functor_parameter = lazy_functor_parameter
 
   let module_decl = subst_lazy_module_decl
   let modtype = subst_lazy_modtype
@@ -764,6 +768,7 @@ module Lazy = struct
   let force_signature = force_signature
   let force_signature_once = force_signature_once
   let force_signature_item = force_signature_item
+  let force_functor_parameter = force_functor_parameter
 end
 
 let signature sc s sg =
