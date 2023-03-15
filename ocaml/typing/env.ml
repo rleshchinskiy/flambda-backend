@@ -151,8 +151,8 @@ type summary =
   | Env_value of summary * Ident.t * value_description
   | Env_type of summary * Ident.t * type_declaration
   | Env_extension of summary * Ident.t * extension_constructor
-  | Env_module of summary * Ident.t * module_presence * module_declaration
-  | Env_modtype of summary * Ident.t * modtype_declaration
+  | Env_module of summary * Ident.t * module_presence * Subst.Lazy.module_decl
+  | Env_modtype of summary * Ident.t * Subst.Lazy.modtype_declaration
   | Env_class of summary * Ident.t * class_declaration
   | Env_cltype of summary * Ident.t * class_type_declaration
   | Env_open of summary * Path.t
@@ -2144,7 +2144,7 @@ and store_module ?(update_summary=true) ~check
   in
   let summary =
     if not update_summary then env.summary
-    else Env_module (env.summary, id, presence, force_module_decl md) in
+    else Env_module (env.summary, id, presence, md) in
   { env with
     modules = IdTbl.add id (Mod_local mda) env.modules;
     summary }
@@ -2154,7 +2154,7 @@ and store_modtype ?(update_summary=true) id info shape env =
   let mtda = { mtda_declaration = info; mtda_shape = shape } in
   let summary =
     if not update_summary then env.summary
-    else Env_modtype (env.summary, id, Subst.Lazy.force_modtype_decl info) in
+    else Env_modtype (env.summary, id, info) in
   { env with
     modtypes = IdTbl.add id mtda env.modtypes;
     summary }
@@ -2237,7 +2237,8 @@ and add_extension ~check ?shape ~rebind id ext env =
   let shape = shape_or_leaf ext.ext_uid shape in
   store_extension ~check ~rebind id addr ext shape env
 
-and add_module_declaration ?(arg=false) ?shape ~check id presence md env =
+and add_module_declaration_lazy
+      ~update_summary ?(arg=false) ?shape ?(check=false) id presence md env =
   let check =
     if not check then
       None
@@ -2246,27 +2247,24 @@ and add_module_declaration ?(arg=false) ?shape ~check id presence md env =
     else
       Some (fun s -> Warnings.Unused_module s)
   in
-  let md = Subst.Lazy.of_module_decl md in
   let addr = module_declaration_address env id presence md in
-  let shape = shape_or_leaf md.mdl_uid shape in
-  let env = store_module ~check id addr presence md shape env in
+  let shape = shape_or_leaf md.Subst.Lazy.mdl_uid shape in
+  let env =
+    store_module ~update_summary ~check id addr presence md shape env
+  in
   if arg then add_functor_arg id env else env
 
-and add_module_declaration_lazy ~update_summary id presence md env =
-  let addr = module_declaration_address env id presence md in
-  let shape = Shape.leaf md.Subst.Lazy.mdl_uid in
-  let env =
-    store_module ~update_summary ~check:None id addr presence md shape env
-  in
-  env
+let add_module_declaration ?(arg=false) ?shape ~check id presence md env =
+  add_module_declaration_lazy ~update_summary:true ~arg ?shape ~check id
+    presence (Subst.Lazy.of_module_decl md) env
 
-and add_modtype ?shape id info env =
-  let shape = shape_or_leaf info.mtd_uid shape in
-  store_modtype id (Subst.Lazy.of_modtype_decl info) shape env
-
-and add_modtype_lazy ~update_summary id info env =
-  let shape = Shape.leaf info.Subst.Lazy.mtdl_uid in
+and add_modtype_lazy ~update_summary ?shape id info env =
+  let shape = shape_or_leaf info.Subst.Lazy.mtdl_uid shape in
   store_modtype ~update_summary id info shape env
+
+let add_modtype ?shape id info env =
+  add_modtype_lazy ~update_summary:true ?shape id
+    (Subst.Lazy.of_modtype_decl info) env
 
 and add_class ?shape id ty env =
   let addr = class_declaration_address env id ty in
@@ -2403,7 +2401,10 @@ let add_type = add_type ?shape:None
 let add_extension = add_extension ?shape:None
 let add_class = add_class ?shape:None
 let add_cltype = add_cltype ?shape:None
+let add_modtype_lazy = add_modtype_lazy ?shape:None
 let add_modtype = add_modtype ?shape:None
+let add_module_declaration_lazy ?(arg=false) =
+  add_module_declaration_lazy ~arg ?shape:None ?check:None
 let add_signature sg env =
   let _, env = add_signature (Shape.Map.empty, None) sg env in
   env
