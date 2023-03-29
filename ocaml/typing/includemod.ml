@@ -258,7 +258,7 @@ let is_runtime_component =
   function
   | SigL_value(_,{val_kind = Val_prim _}, _)
   | SigL_type(_,_,_,_)
-  | SigL_module(_,Mp_absent,_,_,_)
+  | SigL_module(_,Mp_absent _,_,_,_)
   | SigL_modtype(_,_,_)
   | SigL_class_type(_,_,_,_) -> false
   | SigL_value(_,_,_)
@@ -807,12 +807,11 @@ and signature_components :
                     Shape.Map.add_module shape_map id1 orig_shape
               in
               let present_at_runtime, item =
-                match pres1, pres2, mty1.mdl_type with
-                | Mp_present, Mp_present, _ -> true, item
-                | _, Mp_absent, _ -> false, item
-                | Mp_absent, Mp_present, MtyL_alias p1 ->
+                match pres1, pres2 with
+                | Mp_present, Mp_present -> true, item
+                | _, Mp_absent _ -> false, item
+                | Mp_absent p1, Mp_present ->
                     true, Result.map (fun i -> Tcoerce_alias (env, p1, i)) item
-                | Mp_absent, Mp_present, _ -> assert false
               in
               let item = mark_error_as_unrecoverable item in
               id1, item, shape_map, present_at_runtime

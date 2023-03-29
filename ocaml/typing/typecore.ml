@@ -756,11 +756,7 @@ let add_module_variables env module_variables =
                   (mkloc (Longident.Lident mv_name.txt)
                     mv_name.loc)))
       in
-      let pres =
-        match modl.mod_type with
-        | Mty_alias _ -> Mp_absent
-        | _ -> Mp_present
-      in
+      let pres = Mtype.modtype_presence modl.mod_type in
       let md =
         { md_type = modl.mod_type; md_attributes = [];
           md_loc = mv_name.loc;
@@ -4964,11 +4960,7 @@ and type_expect_
       let modl, pres, id, new_env = Typetexp.TyVarEnv.with_local_scope begin fun () ->
         let modl, md_shape = !type_module env smodl in
         Mtype.lower_nongen (get_level ty) modl.mod_type;
-        let pres =
-          match modl.mod_type with
-          | Mty_alias _ -> Mp_absent
-          | _ -> Mp_present
-        in
+        let pres = Mtype.modtype_presence modl.mod_type in
         let scope = create_scope () in
         let md =
           { md_type = modl.mod_type; md_attributes = []; md_loc = name.loc;

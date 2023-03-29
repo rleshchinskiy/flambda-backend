@@ -697,6 +697,10 @@ and subst_lazy_signature_item' copy_scope scoping s comp =
   | SigL_typext(id, ext, es, vis) ->
       SigL_typext(id, extension_constructor' copy_scope s ext, es, vis)
   | SigL_module(id, pres, d, rs, vis) ->
+      let pres = match pres with
+        | Mp_present -> Mp_present
+        | Mp_absent path -> Mp_absent (module_path s path)
+      in
       SigL_module(id, pres, subst_lazy_module_decl scoping s d, rs, vis)
   | SigL_modtype(id, d, vis) ->
       SigL_modtype(id, subst_lazy_modtype_decl scoping s d, vis)

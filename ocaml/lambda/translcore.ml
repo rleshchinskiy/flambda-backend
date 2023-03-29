@@ -709,7 +709,7 @@ and transl_exp0 ~in_new_scope ~scopes e =
         !transl_module ~scopes:mod_scopes Tcoerce_none None modl
       in
       Llet(Strict, Lambda.layout_module, id, defining_expr, transl_exp ~scopes body)
-  | Texp_letmodule(_, _, Mp_absent, _, body) ->
+  | Texp_letmodule(_, _, Mp_absent _, _, body) ->
       transl_exp ~scopes body
   | Texp_letexception(cd, body) ->
       Llet(Strict, Lambda.layout_block,

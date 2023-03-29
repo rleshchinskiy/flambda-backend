@@ -340,7 +340,7 @@ and functor_parameter =
 
 and module_presence =
   | Mp_present
-  | Mp_absent
+  | Mp_absent of Path.t
 
 and signature = signature_item list
 

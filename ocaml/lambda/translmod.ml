@@ -312,10 +312,10 @@ let init_shape id modl =
         init_shape_mod id md.md_loc env md.md_type ::
         init_shape_struct (Env.add_module_declaration ~check:false
                              id Mp_present md env) rem
-    | Sig_module(id, Mp_absent, md, _, _) :: rem ->
+    | Sig_module(id, Mp_absent path, md, _, _) :: rem ->
         init_shape_struct
           (Env.add_module_declaration ~check:false
-                             id Mp_absent md env) rem
+                             id (Mp_absent path) md env) rem
     | Sig_modtype(id, minfo, _) :: rem ->
         init_shape_struct (Env.add_modtype id minfo env) rem
     | Sig_class _ :: rem ->
@@ -722,7 +722,7 @@ and transl_structure ~scopes loc fields cc rootpath final_env = function
           | Some id ->
               Llet(pure_module mb.mb_expr, Lambda.layout_module, id, module_body, body), size
           end
-      | Tstr_module ({mb_presence=Mp_absent}) ->
+      | Tstr_module ({mb_presence=Mp_absent _}) ->
           transl_structure ~scopes loc fields cc rootpath final_env rem
       | Tstr_recmodule bindings ->
           let ext_fields =
@@ -941,7 +941,7 @@ let rec defined_idents = function
     | Tstr_module {mb_id = Some id; mb_presence=Mp_present} ->
       id :: defined_idents rem
     | Tstr_module ({mb_id = None}
-                  |{mb_presence=Mp_absent}) -> defined_idents rem
+                  |{mb_presence=Mp_absent _}) -> defined_idents rem
     | Tstr_recmodule decls ->
       List.filter_map (fun mb -> mb.mb_id) decls @ defined_idents rem
     | Tstr_modtype _ -> defined_idents rem
@@ -1044,7 +1044,7 @@ and all_idents = function
         id :: all_idents str.str_items @ all_idents rem
     | Tstr_module {mb_id = Some id;mb_presence=Mp_present} ->
         id :: all_idents rem
-    | Tstr_module ({mb_id = None} | {mb_presence=Mp_absent}) -> all_idents rem
+    | Tstr_module ({mb_id = None} | {mb_presence=Mp_absent _}) -> all_idents rem
     | Tstr_attribute _ -> all_idents rem
 
 
@@ -1217,7 +1217,7 @@ let transl_store_structure ~scopes glob map prims aliases str =
                            transl_store ~scopes rootpath
                              (add_ident true id subst)
                              cont rem))
-        | Tstr_module ({mb_presence=Mp_absent}) ->
+        | Tstr_module ({mb_presence=Mp_absent _}) ->
             transl_store ~scopes rootpath subst cont rem
         | Tstr_recmodule bindings ->
             let ids = List.filter_map (fun mb -> mb.mb_id) bindings in
@@ -1693,7 +1693,7 @@ let transl_toplevel_item ~scopes item =
                transl_module ~scopes Tcoerce_none None od.open_expr,
                set_idents 0 ids)
       end
-  | Tstr_module ({mb_presence=Mp_absent}) ->
+  | Tstr_module ({mb_presence=Mp_absent _}) ->
       lambda_unit
   | Tstr_modtype _
   | Tstr_type _

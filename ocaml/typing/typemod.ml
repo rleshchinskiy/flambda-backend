@@ -921,11 +921,7 @@ and approx_sig env ssg =
       | Psig_module pmd ->
           let scope = Ctype.create_scope () in
           let md = approx_module_declaration env pmd in
-          let pres =
-            match md.Types.md_type with
-            | Mty_alias _ -> Mp_absent
-            | _ -> Mp_present
-          in
+          let pres = Mtype.modtype_presence md.Types.md_type in
           let id, newenv =
             Env.enter_module_declaration ~scope (Option.get pmd.pmd_name.txt)
               pres md env
@@ -937,11 +933,7 @@ and approx_sig env ssg =
             Env.lookup_module ~use:false ~loc:pms.pms_manifest.loc
                pms.pms_manifest.txt env
           in
-          let pres =
-            match md.Types.md_type with
-            | Mty_alias _ -> Mp_absent
-            | _ -> Mp_present
-          in
+          let pres = Mtype.modtype_presence md.Types.md_type in
           let _, newenv =
             Env.enter_module_declaration ~scope pms.pms_name.txt pres md env
           in
@@ -1554,11 +1546,7 @@ and transl_signature env (sg : Parsetree.signature) =
           Builtin_attributes.warning_scope pmd.pmd_attributes
             (fun () -> transl_modtype env pmd.pmd_type)
         in
-        let pres =
-          match tmty.mty_type with
-          | Mty_alias _ -> Mp_absent
-          | _ -> Mp_present
-        in
+        let pres = Mtype.modtype_presence tmty.mty_type in
         let md = {
           md_type=tmty.mty_type;
           md_attributes=pmd.pmd_attributes;
@@ -1607,11 +1595,7 @@ and transl_signature env (sg : Parsetree.signature) =
               md_uid = Uid.mk ~current_unit:(Env.get_unit_name ());
             }
         in
-        let pres =
-          match md.md_type with
-          | Mty_alias _ -> Mp_absent
-          | _ -> Mp_present
-        in
+        let pres = Mtype.modtype_presence md.md_type in
         let id, newenv =
           Env.enter_module_declaration ~scope pms.pms_name.txt pres md env
         in
@@ -2672,11 +2656,7 @@ and type_structure ?(toplevel = None) funct_body anchor env sstr =
                  (anchor_submodule name.txt anchor) env smodl
             )
         in
-        let pres =
-          match modl.mod_type with
-          | Mty_alias _ -> Mp_absent
-          | _ -> Mp_present
-        in
+        let pres = Mtype.modtype_presence modl.mod_type in
         let md_uid = Uid.mk ~current_unit:(Env.get_unit_name ()) in
         let md =
           { md_type = enrich_module_type anchor name.txt modl.mod_type env;

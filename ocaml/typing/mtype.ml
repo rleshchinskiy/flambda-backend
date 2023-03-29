@@ -176,7 +176,7 @@ let rec sig_make_manifest sg =
 
 let rec make_aliases_absent pres mty =
   match mty with
-  | Mty_alias _ -> Mp_absent, mty
+  | Mty_alias path -> Mp_absent path, mty
   | Mty_signature sg ->
       pres, Mty_signature(make_aliases_absent_sig sg)
   | Mty_functor(arg, res) ->
@@ -417,7 +417,7 @@ and type_paths_sig env p sg =
 
 let rec no_code_needed_mod env pres mty =
   match pres with
-  | Mp_absent -> true
+  | Mp_absent _ -> true
   | Mp_present -> begin
       match scrape env mty with
         Mty_ident _ -> false
@@ -632,3 +632,7 @@ let lower_nongen nglev mty =
   let it = {type_iterators with it_type_expr} in
   it.it_module_type it mty;
   it.it_module_type unmark_iterators mty
+
+let modtype_presence = function
+  | Mty_alias path -> Mp_absent path
+  | _ -> Mp_present

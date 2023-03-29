@@ -1724,14 +1724,10 @@ let extension_declaration_address (_ : t) id (_ : extension_constructor) =
 let class_declaration_address (_ : t) id (_ : class_declaration) =
   Lazy_backtrack.create_forced (Alocal id)
 
-let module_declaration_address env id presence md =
+let module_declaration_address env id presence =
   match presence with
-  | Mp_absent -> begin
-      let open Subst.Lazy in
-      match md.mdl_type with
-      | MtyL_alias path -> Lazy_backtrack.create (ModAlias {env; path})
-      | _ -> assert false
-    end
+  | Mp_absent path ->
+      Lazy_backtrack.create (ModAlias {env; path})
   | Mp_present ->
       Lazy_backtrack.create_forced (Alocal id)
 
@@ -1851,12 +1847,8 @@ let rec components_of_module_maker
             in
             let addr =
               match pres with
-              | Mp_absent -> begin
-                  match md.mdl_type with
-                  | MtyL_alias path ->
-                      Lazy_backtrack.create (ModAlias {env = !env; path})
-                  | _ -> assert false
-                end
+              | Mp_absent path ->
+                  Lazy_backtrack.create (ModAlias {env = !env; path})
               | Mp_present -> next_address ()
             in
             let alerts =
@@ -2253,7 +2245,7 @@ and add_module_declaration_lazy
     else
       Some (fun s -> Warnings.Unused_module s)
   in
-  let addr = module_declaration_address env id presence md in
+  let addr = module_declaration_address env id presence in
   let shape = shape_or_leaf md.Subst.Lazy.mdl_uid shape in
   let env =
     store_module ~update_summary ~check id addr presence md shape env
