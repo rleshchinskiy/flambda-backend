@@ -448,9 +448,43 @@ type scoping =
   | Rescope of int
 
 module Lazy_types = struct
-  module Pod = struct
+  module Pod : sig
+    type subst = t
+    type 'a t
+
+    val from_value : 'a -> 'a t
+    val from_lazy : 'a Lazy.t -> 'a t
+    val force : (scoping -> subst -> 'a -> 'a) -> 'a t -> 'a
+    val substitute : compose:(subst -> subst -> subst) -> scoping -> subst -> 'a t -> 'a t
+  end = struct
     type subst = t
     type 'a t = (scoping * subst option * 'a Lazy.t, 'a) Lazy_backtrack.t
+
+
+    let from_value = Lazy_backtrack.create_forced
+    let from_lazy x = Lazy_backtrack.create (Keep, None, x)
+
+    let substitute ~compose scoping s x =
+      match Lazy_backtrack.get_contents x with
+      | Left (_, None, x) ->
+        Lazy_backtrack.create (scoping, Some s, x)
+      | Left (scoping', Some s', x) ->
+         let scoping =
+           match scoping', scoping with
+           | sc, Keep -> sc
+           | _, (Make_local|Rescope _) -> scoping
+         in
+         let s = compose s' s in
+         Lazy_backtrack.create (scoping, Some s, x)
+      | Right x ->
+         Lazy_backtrack.create (scoping, Some s, Lazy.from_val x)
+  
+    let force f = Lazy_backtrack.force (fun (scoping, s, x) ->
+      let subst = match s with
+        | Some s -> f scoping s
+        | None -> Fun.id
+      in
+      subst (Lazy.force x))
   end
 
   include Types.Gen(Pod)
@@ -540,7 +574,7 @@ and force_functor_parameter = function
 and lazy_modtype = function
   | Types.Mty_ident p -> Mty_ident p
   | Types.Mty_signature sg ->
-     Mty_signature (Lazy_backtrack.create (Keep, None, Lazy.from_fun (fun () -> List.map lazy_signature_item sg)))
+     Mty_signature (Pod.from_lazy (lazy (List.map lazy_signature_item sg)))
   | Types.Mty_functor (param, mty) ->
      Mty_functor (lazy_functor_parameter param, lazy_modtype mty)
   | Types.Mty_alias p -> Mty_alias p
@@ -600,39 +634,23 @@ and force_modtype_decl mtd =
     mtd_uid = mtd.mtd_uid }
 
 and subst_lazy_signature scoping s sg =
-  match Lazy_backtrack.get_contents sg with
-  | Left (_, None, sg) ->
-    Lazy_backtrack.create (scoping, Some s, sg)
-  | Left (scoping', Some s', sg) ->
-     let scoping =
-       match scoping', scoping with
-       | sc, Keep -> sc
-       | _, (Make_local|Rescope _) -> scoping
-     in
-     let s = compose s' s in
-     Lazy_backtrack.create (scoping, Some s, sg)
-  | Right sg ->
-     Lazy_backtrack.create (scoping, Some s, Lazy.from_val sg)
+  Pod.substitute ~compose scoping s sg
 
 and force_signature sg =
   List.map force_signature_item (force_signature_once sg)
 
 and force_signature_once sg =
-  Lazy_backtrack.force force_signature_once' sg
+  Pod.force force_signature_once' sg
 
-and force_signature_once' (scoping, s, sg) =
-  let sg = Lazy.force sg in
-  match s with
-    | Some s ->
-      (* Components of signature may be mutually recursive (e.g. type declarations
-        or class and type declarations), so first build global renaming
-        substitution... *)
-      let (sg', s') = rename_bound_idents scoping s sg in
-      (* ... then apply it to each signature component in turn *)
-      For_copy.with_scope (fun copy_scope ->
-        List.rev_map (subst_lazy_signature_item' copy_scope scoping s') sg'
-      )
-    | None -> sg
+and force_signature_once' scoping s sg =
+  (* Components of signature may be mutually recursive (e.g. type declarations
+    or class and type declarations), so first build global renaming
+    substitution... *)
+  let (sg', s') = rename_bound_idents scoping s sg in
+  (* ... then apply it to each signature component in turn *)
+  For_copy.with_scope (fun copy_scope ->
+    List.rev_map (subst_lazy_signature_item' copy_scope scoping s') sg'
+  )
 
 and lazy_signature_item = function
   | Types.Sig_value(id, d, vis) ->
@@ -716,8 +734,8 @@ module Lazy = struct
   let of_module_decl = lazy_module_decl
   let of_modtype = lazy_modtype
   let of_modtype_decl = lazy_modtype_decl
-  let of_signature sg = Lazy_backtrack.create (Keep, None, lazy (List.map lazy_signature_item sg))
-  let of_signature_items sg = Lazy_backtrack.create_forced sg
+  let of_signature sg = Pod.from_lazy (lazy (List.map lazy_signature_item sg))
+  let of_signature_items sg = Pod.from_value sg
   let of_signature_item = lazy_signature_item
   let of_functor_parameter = lazy_functor_parameter
 
