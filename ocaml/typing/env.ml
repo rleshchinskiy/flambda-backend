@@ -610,7 +610,7 @@ and address_unforced =
 and address_lazy = (address_unforced, address) Lazy_backtrack.t
 
 and value_data =
-  { vda_description : value_description;
+  { vda_description : Subst.Lazy.value_description;
     vda_address : address_lazy;
     vda_mode : Value_mode.t;
     vda_shape : Shape.t }
@@ -1516,9 +1516,9 @@ let make_copy_of_types env0 =
   let f = function
     | Val_unbound _ as entry -> entry
     | Val_bound vda ->
-        let desc = vda.vda_description in
+        let desc = Subst.Lazy.force_value_description vda.vda_description in
         let desc = { desc with val_type = copy desc.val_type } in
-        Val_bound { vda with vda_description = desc }
+        Val_bound { vda with vda_description = Subst.Lazy.of_value_description desc }
   in
   let values =
     IdTbl.map f env0.values
@@ -1714,7 +1714,7 @@ let primitive_address_error =
   Invalid_argument "Primitives don't have addresses"
 
 let value_declaration_address (_ : t) id decl =
-  match decl.val_kind with
+  match decl.Subst.Lazy.val_kind with
   | Val_prim _ -> Lazy_backtrack.create_failed primitive_address_error
   | _ -> Lazy_backtrack.create_forced (Alocal id)
 
@@ -1768,7 +1768,7 @@ let rec components_of_module_maker
       List.iter (fun ((item : Subst.Lazy.signature_item), path) ->
         match item with
           Sig_value(id, decl, _) ->
-            let decl' = Subst.value_description sub decl in
+            let decl' = Subst.Lazy.value_description sub decl in
             let addr =
               match decl.val_kind with
               | Val_prim _ -> Lazy_backtrack.create_failed primitive_address_error
@@ -1950,6 +1950,7 @@ and check_value_name name loc =
     done
 
 and store_value ?check mode id addr decl shape env =
+  let open Subst.Lazy in
   check_value_name (Ident.name id) decl.val_loc;
   Builtin_attributes.mark_alerts_used decl.val_attributes;
   Option.iter
@@ -1963,7 +1964,7 @@ and store_value ?check mode id addr decl shape env =
   in
   { env with
     values = IdTbl.add id (Val_bound vda) env.values;
-    summary = Env_value(env.summary, id, decl) }
+    summary = Env_value(env.summary, id, Subst.Lazy.force_value_description decl) }
 
 and store_constructor ~check type_decl type_id cstr_id cstr env =
   if check && not type_decl.type_loc.Location.loc_ghost
@@ -2221,9 +2222,9 @@ let add_functor_arg id env =
    functor_args = Ident.add id () env.functor_args;
    summary = Env_functor_arg (env.summary, id)}
 
-let add_value ?check ?shape ?(mode = Value_mode.global) id desc env =
+let add_value_lazy ?check ?shape ?(mode = Value_mode.global) id desc env =
   let addr = value_declaration_address env id desc in
-  let shape = shape_or_leaf desc.val_uid shape in
+  let shape = shape_or_leaf desc.Subst.Lazy.val_uid shape in
   store_value ?check mode id addr desc shape env
 
 let add_type ~check ?shape id info env =
@@ -2292,6 +2293,7 @@ let add_local_type path info env =
 
 let enter_value ?check name desc env =
   let id = Ident.create_local name in
+  let desc = Subst.Lazy.of_value_description desc in
   let addr = value_declaration_address env id desc in
   let env = store_value ?check Value_mode.global id addr desc (Shape.leaf desc.val_uid) env in
   (id, env)
@@ -2352,7 +2354,7 @@ let add_item (map, mod_shape) comp env =
   match comp with
   | Sig_value(id, decl, _) ->
       let map, shape = proj_shape (map, mod_shape) (Shape.Item.value id) in
-      map, add_value ?shape id decl env
+      map, add_value_lazy ?shape id (Subst.Lazy.of_value_description decl) env
   | Sig_type(id, decl, _, _) ->
       let map, shape = proj_shape (map, mod_shape) (Shape.Item.type_ id) in
       map, add_type ~check:false ?shape id decl env
@@ -2384,7 +2386,7 @@ let add_item_lazy (map, mod_shape) comp env =
   match comp with
   | Sig_value(id, decl, _) ->
       let map, shape = proj_shape (map, mod_shape) (Shape.Item.value id) in
-      map, add_value ?shape id decl env
+      map, add_value_lazy ?shape id decl env
   | Sig_type(id, decl, _, _) ->
       let map, shape = proj_shape (map, mod_shape) (Shape.Item.type_ id) in
       map, add_type ~check:false ?shape id decl env
@@ -2426,7 +2428,8 @@ let enter_signature ?mod_shape ~scope sg env =
 let enter_signature_and_shape ~scope ~parent_shape mod_shape sg env =
   enter_signature_and_shape ~scope ~parent_shape (Some mod_shape) sg env
 
-let add_value = add_value ?shape:None
+let add_value_lazy = add_value_lazy ?shape:None
+let add_value ?check ?mode id vd = add_value_lazy ?check ?mode id (Subst.Lazy.of_value_description vd)
 let add_type = add_type ?shape:None
 let add_extension = add_extension ?shape:None
 let add_class = add_class ?shape:None
@@ -2732,7 +2735,7 @@ let mark_cltype_used uid =
   | exception Not_found -> ()
 
 let set_value_used_callback vd callback =
-  Types.Uid.Tbl.add !value_declarations vd.val_uid callback
+  Types.Uid.Tbl.add !value_declarations vd.Subst.Lazy.val_uid callback
 
 let set_type_used_callback td callback =
   if Uid.for_actual_declaration td.type_uid then
@@ -3270,7 +3273,7 @@ let find_module_by_name lid env =
 let find_value_by_name lid env =
   let loc = Location.(in_file !input_name) in
   let path, desc, _ = lookup_value ~errors:false ~use:false ~loc lid env in
-  path, desc
+  path, Subst.Lazy.force_value_description desc
 
 let find_type_by_name lid env =
   let loc = Location.(in_file !input_name) in
@@ -3350,7 +3353,7 @@ let lookup_all_labels_from_type ?(use=true) ~loc usage ty_path env =
 let lookup_instance_variable ?(use=true) ~loc name env =
   match IdTbl.find_name_and_modes wrap_value ~mark:use name env.values with
   | (path, _, Val_bound vda) -> begin
-      let desc = vda.vda_description in
+      let desc = Subst.Lazy.force_value_description vda.vda_description in
       match desc.val_kind with
       | Val_ivar(mut, cl_num) ->
           use_value ~use ~loc path vda;

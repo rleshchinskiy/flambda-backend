@@ -397,16 +397,6 @@ let cltype_declaration s decl =
 let class_type s cty =
   For_copy.with_scope (fun copy_scope -> class_type copy_scope s cty)
 
-let value_description' copy_scope s descr =
-  { val_type = typexp copy_scope s descr.val_type;
-    val_kind = descr.val_kind;
-    val_loc = loc s descr.val_loc;
-    val_attributes = attrs s descr.val_attributes;
-    val_uid = descr.val_uid;
-   }
-
-let value_description s descr =
-  For_copy.with_scope (fun copy_scope -> value_description' copy_scope s descr)
 
 let extension_constructor' copy_scope s ext =
   { ext_type_path = type_path s ext.ext_type_path;
@@ -543,7 +533,44 @@ let rename_bound_idents scoping s sg =
   in
   rename_bound_idents s [] sg
 
-let rec lazy_module_decl md =
+(*
+let rec value_description' copy_scope s descr =
+  { val_type = typexp copy_scope s descr.val_type;
+    val_kind = descr.val_kind;
+    val_loc = loc s descr.val_loc;
+    val_attributes = attrs s descr.val_attributes;
+    val_uid = descr.val_uid;
+   }
+*)
+
+let rec subst_lazy_value_description s descr =
+  { val_type = Pod.substitute ~compose Keep s descr.val_type;
+    val_kind = descr.val_kind;
+    val_loc = loc s descr.val_loc;
+    val_attributes = attrs s descr.val_attributes;
+    val_uid = descr.val_uid;
+  }
+    
+and lazy_value_description descr =
+  { val_type = Pod.from_value descr.Types.val_type;
+    val_kind = descr.Types.val_kind;
+    val_loc = descr.Types.val_loc;
+    val_attributes = descr.Types.val_attributes;
+    val_uid = descr.Types.val_uid;
+  }
+
+and force_value_description descr =
+  { Types.val_type = Pod.force (fun _scoping s ty ->
+      For_copy.with_scope (fun copy_scope ->
+        typexp copy_scope s ty
+      )) descr.val_type;
+    Types.val_kind = descr.val_kind;
+    Types.val_loc = descr.val_loc;
+    Types.val_attributes = descr.val_attributes;
+    Types.val_uid = descr.val_uid;
+  }
+
+and lazy_module_decl md =
   { md_type = lazy_modtype md.Types.md_type;
     md_attributes = md.Types.md_attributes;
     md_loc = md.Types.md_loc;
@@ -654,7 +681,7 @@ and force_signature_once' scoping s sg =
 
 and lazy_signature_item = function
   | Types.Sig_value(id, d, vis) ->
-     Sig_value(id, d, vis)
+     Sig_value(id, lazy_value_description d, vis)
   | Types.Sig_type(id, d, rs, vis) ->
      Sig_type(id, d, rs, vis)
   | Types.Sig_typext(id, ext, es, vis) ->
@@ -671,7 +698,7 @@ and lazy_signature_item = function
 and subst_lazy_signature_item' copy_scope scoping s comp =
   match comp with
     Sig_value(id, d, vis) ->
-      Sig_value(id, value_description' copy_scope s d, vis)
+      Sig_value(id, subst_lazy_value_description s d, vis)
   | Sig_type(id, d, rs, vis) ->
       Sig_type(id, type_declaration' copy_scope s d, rs, vis)
   | Sig_typext(id, ext, es, vis) ->
@@ -690,7 +717,7 @@ and subst_lazy_signature_item' copy_scope scoping s comp =
       Sig_class_type(id, cltype_declaration' copy_scope s d, rs, vis)
 
 and force_signature_item = function
-  | Sig_value(id, vd, vis) -> Types.Sig_value(id, vd, vis)
+  | Sig_value(id, vd, vis) -> Types.Sig_value(id, force_value_description vd, vis)
   | Sig_type(id, d, rs, vis) -> Types.Sig_type(id, d, rs, vis)
   | Sig_typext(id, ext, es, vis) -> Types.Sig_typext(id, ext, es, vis)
   | Sig_module(id, pres, d, rs, vis) ->
@@ -738,12 +765,14 @@ module Lazy = struct
   let of_signature_items sg = Pod.from_value sg
   let of_signature_item = lazy_signature_item
   let of_functor_parameter = lazy_functor_parameter
+  let of_value_description = lazy_value_description
 
   let module_decl = subst_lazy_module_decl
   let modtype = subst_lazy_modtype
   let modtype_decl = subst_lazy_modtype_decl
   let signature = subst_lazy_signature
   let signature_item = subst_lazy_signature_item
+  let value_description = subst_lazy_value_description
 
   let force_module_decl = force_module_decl
   let force_modtype = force_modtype
@@ -752,6 +781,7 @@ module Lazy = struct
   let force_signature_once = force_signature_once
   let force_signature_item = force_signature_item
   let force_functor_parameter = force_functor_parameter
+  let force_value_description = force_value_description
 end
 
 let signature sc s sg =
@@ -765,3 +795,6 @@ let modtype_declaration sc s decl =
 
 let module_declaration scoping s decl =
   Lazy.(decl |> of_module_decl |> module_decl scoping s |> force_module_decl)
+
+let value_description s descr =
+  Lazy.(descr |> of_value_description |> value_description s |> force_value_description)  

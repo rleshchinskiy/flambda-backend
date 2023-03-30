@@ -119,15 +119,7 @@ module Vars = Misc.Stdlib.String.Map
 
 (* Value descriptions *)
 
-type value_description =
-  { val_type: type_expr;                (* Type of the value *)
-    val_kind: value_kind;
-    val_loc: Location.t;
-    val_attributes: Parsetree.attributes;
-    val_uid: Uid.t;
-  }
-
-and value_kind =
+type value_kind =
     Val_reg                             (* Regular value *)
   | Val_prim of Primitive.description   (* Primitive *)
   | Val_ivar of mutable_flag * string   (* Instance variable (mutable ?) *)
@@ -347,6 +339,14 @@ module type Pod = sig
 end
 
 module Gen(Pod : Pod) = struct
+  type value_description =
+  { val_type: type_expr Pod.t;                (* Type of the value *)
+    val_kind: value_kind;
+    val_loc: Location.t;
+    val_attributes: Parsetree.attributes;
+    val_uid: Uid.t;
+  }
+
   type module_type =
     Mty_ident of Path.t
   | Mty_signature of signature
