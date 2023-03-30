@@ -448,51 +448,12 @@ type scoping =
   | Rescope of int
 
 module Lazy_types = struct
+  module Pod = struct
+    type subst = t
+    type 'a t = (scoping * subst option * 'a Lazy.t, 'a) Lazy_backtrack.t
+  end
 
-  type module_decl =
-    {
-      mdl_type: modtype;
-      mdl_attributes: Parsetree.attributes;
-      mdl_loc: Location.t;
-      mdl_uid: Uid.t;
-    }
-
-  and modtype =
-    | MtyL_ident of Path.t
-    | MtyL_signature of signature
-    | MtyL_functor of functor_parameter * modtype
-    | MtyL_alias of Path.t
-
-  and modtype_declaration =
-    {
-      mtdl_type: modtype option;
-      mtdl_attributes: Parsetree.attributes;
-      mtdl_loc: Location.t;
-      mtdl_uid: Uid.t;
-    }
-
-  and signature' =
-    | S_eager of Types.signature
-    | S_lazy of signature_item list
-
-  and signature =
-    (scoping * t * signature', signature') Lazy_backtrack.t
-
-  and signature_item =
-      SigL_value of Ident.t * value_description * visibility
-    | SigL_type of Ident.t * type_declaration * rec_status * visibility
-    | SigL_typext of Ident.t * extension_constructor * ext_status * visibility
-    | SigL_module of
-        Ident.t * module_presence * module_decl * rec_status * visibility
-    | SigL_modtype of Ident.t * modtype_declaration * visibility
-    | SigL_class of Ident.t * class_declaration * rec_status * visibility
-    | SigL_class_type of Ident.t * class_type_declaration *
-                           rec_status * visibility
-
-  and functor_parameter =
-    | Unit
-    | Named of Ident.t option * modtype
-
+  include Types.Gen(Pod)
 end
 open Lazy_types
 
@@ -506,67 +467,67 @@ let rename_bound_idents scoping s sg =
   in
   let rec rename_bound_idents s sg = function
     | [] -> sg, s
-    | SigL_type(id, td, rs, vis) :: rest ->
+    | Sig_type(id, td, rs, vis) :: rest ->
         let id' = rename id in
         rename_bound_idents
           (add_type id (Pident id') s)
-          (SigL_type(id', td, rs, vis) :: sg)
+          (Sig_type(id', td, rs, vis) :: sg)
           rest
-    | SigL_module(id, pres, md, rs, vis) :: rest ->
+    | Sig_module(id, pres, md, rs, vis) :: rest ->
         let id' = rename id in
         rename_bound_idents
           (add_module id (Pident id') s)
-          (SigL_module (id', pres, md, rs, vis) :: sg)
+          (Sig_module (id', pres, md, rs, vis) :: sg)
           rest
-    | SigL_modtype(id, mtd, vis) :: rest ->
+    | Sig_modtype(id, mtd, vis) :: rest ->
         let id' = rename id in
         rename_bound_idents
-          (add_modtype id (Mty_ident(Pident id')) s)
-          (SigL_modtype(id', mtd, vis) :: sg)
+          (add_modtype id (Types.Mty_ident(Pident id')) s)
+          (Sig_modtype(id', mtd, vis) :: sg)
           rest
-    | SigL_class(id, cd, rs, vis) :: rest ->
+    | Sig_class(id, cd, rs, vis) :: rest ->
         (* cheat and pretend they are types cf. PR#6650 *)
         let id' = rename id in
         rename_bound_idents
           (add_type id (Pident id') s)
-          (SigL_class(id', cd, rs, vis) :: sg)
+          (Sig_class(id', cd, rs, vis) :: sg)
           rest
-    | SigL_class_type(id, ctd, rs, vis) :: rest ->
+    | Sig_class_type(id, ctd, rs, vis) :: rest ->
         (* cheat and pretend they are types cf. PR#6650 *)
         let id' = rename id in
         rename_bound_idents
           (add_type id (Pident id') s)
-          (SigL_class_type(id', ctd, rs, vis) :: sg)
+          (Sig_class_type(id', ctd, rs, vis) :: sg)
           rest
-    | SigL_value(id, vd, vis) :: rest ->
+    | Sig_value(id, vd, vis) :: rest ->
         (* scope doesn't matter for value identifiers. *)
         let id' = Ident.rename id in
-        rename_bound_idents s (SigL_value(id', vd, vis) :: sg) rest
-    | SigL_typext(id, ec, es, vis) :: rest ->
+        rename_bound_idents s (Sig_value(id', vd, vis) :: sg) rest
+    | Sig_typext(id, ec, es, vis) :: rest ->
         let id' = rename id in
-        rename_bound_idents s (SigL_typext(id',ec,es,vis) :: sg) rest
+        rename_bound_idents s (Sig_typext(id',ec,es,vis) :: sg) rest
   in
   rename_bound_idents s [] sg
 
 let rec lazy_module_decl md =
-  { mdl_type = lazy_modtype md.md_type;
-    mdl_attributes = md.md_attributes;
-    mdl_loc = md.md_loc;
-    mdl_uid = md.md_uid }
+  { md_type = lazy_modtype md.Types.md_type;
+    md_attributes = md.Types.md_attributes;
+    md_loc = md.Types.md_loc;
+    md_uid = md.Types.md_uid }
 
 and subst_lazy_module_decl scoping s md =
-  let mdl_type = subst_lazy_modtype scoping s md.mdl_type in
-  { mdl_type;
-    mdl_attributes = attrs s md.mdl_attributes;
-    mdl_loc = loc s md.mdl_loc;
-    mdl_uid = md.mdl_uid }
+  let md_type = subst_lazy_modtype scoping s md.md_type in
+  { md_type;
+    md_attributes = attrs s md.md_attributes;
+    md_loc = loc s md.md_loc;
+    md_uid = md.md_uid }
 
 and force_module_decl md =
-  let md_type = force_modtype md.mdl_type in
-  { md_type;
-    md_attributes = md.mdl_attributes;
-    md_loc = md.mdl_loc;
-    md_uid = md.mdl_uid }
+  let md_type = force_modtype md.md_type in
+  { Types.md_type;
+    md_attributes = md.md_attributes;
+    md_loc = md.md_loc;
+    md_uid = md.md_uid }
 
 and lazy_functor_parameter = function
 | Types.Unit -> Unit
@@ -577,148 +538,149 @@ and force_functor_parameter = function
 | Named (id, mty) -> Types.Named (id, force_modtype mty)
 
 and lazy_modtype = function
-  | Mty_ident p -> MtyL_ident p
-  | Mty_signature sg ->
-     MtyL_signature (Lazy_backtrack.create_forced (S_eager sg))
-  | Mty_functor (param, mty) ->
-     MtyL_functor (lazy_functor_parameter param, lazy_modtype mty)
-  | Mty_alias p -> MtyL_alias p
+  | Types.Mty_ident p -> Mty_ident p
+  | Types.Mty_signature sg ->
+     Mty_signature (Lazy_backtrack.create (Keep, None, Lazy.from_fun (fun () -> List.map lazy_signature_item sg)))
+  | Types.Mty_functor (param, mty) ->
+     Mty_functor (lazy_functor_parameter param, lazy_modtype mty)
+  | Types.Mty_alias p -> Mty_alias p
 
 and subst_lazy_modtype scoping s = function
-  | MtyL_ident p ->
+  | Mty_ident p ->
       begin match Path.Map.find p s.modtypes with
        | mty -> lazy_modtype mty
        | exception Not_found ->
           begin match p with
-          | Pident _ -> MtyL_ident p
+          | Pident _ -> Mty_ident p
           | Pdot(p, n) ->
-             MtyL_ident(Pdot(module_path s p, n))
+             Mty_ident(Pdot(module_path s p, n))
           | Papply _ ->
              fatal_error "Subst.modtype"
           end
       end
-  | MtyL_signature sg ->
-      MtyL_signature(subst_lazy_signature scoping s sg)
-  | MtyL_functor(Unit, res) ->
-      MtyL_functor(Unit, subst_lazy_modtype scoping s res)
-  | MtyL_functor(Named (None, arg), res) ->
-      MtyL_functor(Named (None, (subst_lazy_modtype scoping s) arg),
+  | Mty_signature sg ->
+      Mty_signature(subst_lazy_signature scoping s sg)
+  | Mty_functor(Unit, res) ->
+      Mty_functor(Unit, subst_lazy_modtype scoping s res)
+  | Mty_functor(Named (None, arg), res) ->
+      Mty_functor(Named (None, (subst_lazy_modtype scoping s) arg),
                    subst_lazy_modtype scoping s res)
-  | MtyL_functor(Named (Some id, arg), res) ->
+  | Mty_functor(Named (Some id, arg), res) ->
       let id' = Ident.rename id in
-      MtyL_functor(Named (Some id', (subst_lazy_modtype scoping s) arg),
+      Mty_functor(Named (Some id', (subst_lazy_modtype scoping s) arg),
                   subst_lazy_modtype scoping (add_module id (Pident id') s) res)
-  | MtyL_alias p ->
-      MtyL_alias (module_path s p)
+  | Mty_alias p ->
+      Mty_alias (module_path s p)
 
 and force_modtype = function
-  | MtyL_ident p -> Mty_ident p
-  | MtyL_signature sg -> Mty_signature (force_signature sg)
-  | MtyL_functor (param, res) ->
-     Mty_functor (force_functor_parameter param, force_modtype res)
-  | MtyL_alias p -> Mty_alias p
+  | Mty_ident p -> Types.Mty_ident p
+  | Mty_signature sg -> Types.Mty_signature (force_signature sg)
+  | Mty_functor (param, res) ->
+     Types.Mty_functor (force_functor_parameter param, force_modtype res)
+  | Mty_alias p -> Types.Mty_alias p
 
 and lazy_modtype_decl mtd =
-  let mtdl_type = Option.map lazy_modtype mtd.mtd_type in
-  { mtdl_type;
-    mtdl_attributes = mtd.mtd_attributes;
-    mtdl_loc = mtd.mtd_loc;
-    mtdl_uid = mtd.mtd_uid }
+  let mtd_type = Option.map lazy_modtype mtd.Types.mtd_type in
+  { mtd_type;
+    mtd_attributes = mtd.Types.mtd_attributes;
+    mtd_loc = mtd.Types.mtd_loc;
+    mtd_uid = mtd.Types.mtd_uid }
 
 and subst_lazy_modtype_decl scoping s mtd =
-  { mtdl_type = Option.map (subst_lazy_modtype scoping s) mtd.mtdl_type;
-    mtdl_attributes = attrs s mtd.mtdl_attributes;
-    mtdl_loc = loc s mtd.mtdl_loc;
-    mtdl_uid = mtd.mtdl_uid }
+  { mtd_type = Option.map (subst_lazy_modtype scoping s) mtd.mtd_type;
+    mtd_attributes = attrs s mtd.mtd_attributes;
+    mtd_loc = loc s mtd.mtd_loc;
+    mtd_uid = mtd.mtd_uid }
 
 and force_modtype_decl mtd =
-  let mtd_type = Option.map force_modtype mtd.mtdl_type in
-  { mtd_type;
-    mtd_attributes = mtd.mtdl_attributes;
-    mtd_loc = mtd.mtdl_loc;
-    mtd_uid = mtd.mtdl_uid }
+  let mtd_type = Option.map force_modtype mtd.mtd_type in
+  { Types.mtd_type;
+    mtd_attributes = mtd.mtd_attributes;
+    mtd_loc = mtd.mtd_loc;
+    mtd_uid = mtd.mtd_uid }
 
 and subst_lazy_signature scoping s sg =
   match Lazy_backtrack.get_contents sg with
-  | Left (scoping', s', sg) ->
+  | Left (_, None, sg) ->
+    Lazy_backtrack.create (scoping, Some s, sg)
+  | Left (scoping', Some s', sg) ->
      let scoping =
        match scoping', scoping with
        | sc, Keep -> sc
        | _, (Make_local|Rescope _) -> scoping
      in
      let s = compose s' s in
-     Lazy_backtrack.create (scoping, s, sg)
+     Lazy_backtrack.create (scoping, Some s, sg)
   | Right sg ->
-     Lazy_backtrack.create (scoping, s, sg)
+     Lazy_backtrack.create (scoping, Some s, Lazy.from_val sg)
 
 and force_signature sg =
   List.map force_signature_item (force_signature_once sg)
 
 and force_signature_once sg =
-  lazy_signature' (Lazy_backtrack.force force_signature_once' sg)
-
-and lazy_signature' = function
-  | S_lazy sg -> sg
-  | S_eager sg -> List.map lazy_signature_item sg
+  Lazy_backtrack.force force_signature_once' sg
 
 and force_signature_once' (scoping, s, sg) =
-  let sg = lazy_signature' sg in
-  (* Components of signature may be mutually recursive (e.g. type declarations
-     or class and type declarations), so first build global renaming
-     substitution... *)
-  let (sg', s') = rename_bound_idents scoping s sg in
-  (* ... then apply it to each signature component in turn *)
-  For_copy.with_scope (fun copy_scope ->
-    S_lazy (List.rev_map (subst_lazy_signature_item' copy_scope scoping s') sg')
-  )
+  let sg = Lazy.force sg in
+  match s with
+    | Some s ->
+      (* Components of signature may be mutually recursive (e.g. type declarations
+        or class and type declarations), so first build global renaming
+        substitution... *)
+      let (sg', s') = rename_bound_idents scoping s sg in
+      (* ... then apply it to each signature component in turn *)
+      For_copy.with_scope (fun copy_scope ->
+        List.rev_map (subst_lazy_signature_item' copy_scope scoping s') sg'
+      )
+    | None -> sg
 
 and lazy_signature_item = function
-  | Sig_value(id, d, vis) ->
-     SigL_value(id, d, vis)
-  | Sig_type(id, d, rs, vis) ->
-     SigL_type(id, d, rs, vis)
-  | Sig_typext(id, ext, es, vis) ->
-     SigL_typext(id, ext, es, vis)
-  | Sig_module(id, res, d, rs, vis) ->
-     SigL_module(id, res, lazy_module_decl d, rs, vis)
-  | Sig_modtype(id, d, vis) ->
-     SigL_modtype(id, lazy_modtype_decl d, vis)
-  | Sig_class(id, d, rs, vis) ->
-     SigL_class(id, d, rs, vis)
-  | Sig_class_type(id, d, rs, vis) ->
-     SigL_class_type(id, d, rs, vis)
+  | Types.Sig_value(id, d, vis) ->
+     Sig_value(id, d, vis)
+  | Types.Sig_type(id, d, rs, vis) ->
+     Sig_type(id, d, rs, vis)
+  | Types.Sig_typext(id, ext, es, vis) ->
+     Sig_typext(id, ext, es, vis)
+  | Types.Sig_module(id, res, d, rs, vis) ->
+     Sig_module(id, res, lazy_module_decl d, rs, vis)
+  | Types.Sig_modtype(id, d, vis) ->
+     Sig_modtype(id, lazy_modtype_decl d, vis)
+  | Types.Sig_class(id, d, rs, vis) ->
+     Sig_class(id, d, rs, vis)
+  | Types.Sig_class_type(id, d, rs, vis) ->
+     Sig_class_type(id, d, rs, vis)
 
 and subst_lazy_signature_item' copy_scope scoping s comp =
   match comp with
-    SigL_value(id, d, vis) ->
-      SigL_value(id, value_description' copy_scope s d, vis)
-  | SigL_type(id, d, rs, vis) ->
-      SigL_type(id, type_declaration' copy_scope s d, rs, vis)
-  | SigL_typext(id, ext, es, vis) ->
-      SigL_typext(id, extension_constructor' copy_scope s ext, es, vis)
-  | SigL_module(id, pres, d, rs, vis) ->
+    Sig_value(id, d, vis) ->
+      Sig_value(id, value_description' copy_scope s d, vis)
+  | Sig_type(id, d, rs, vis) ->
+      Sig_type(id, type_declaration' copy_scope s d, rs, vis)
+  | Sig_typext(id, ext, es, vis) ->
+      Sig_typext(id, extension_constructor' copy_scope s ext, es, vis)
+  | Sig_module(id, pres, d, rs, vis) ->
       let pres = match pres with
         | Mp_present -> Mp_present
         | Mp_absent path -> Mp_absent (module_path s path)
       in
-      SigL_module(id, pres, subst_lazy_module_decl scoping s d, rs, vis)
-  | SigL_modtype(id, d, vis) ->
-      SigL_modtype(id, subst_lazy_modtype_decl scoping s d, vis)
-  | SigL_class(id, d, rs, vis) ->
-      SigL_class(id, class_declaration' copy_scope s d, rs, vis)
-  | SigL_class_type(id, d, rs, vis) ->
-      SigL_class_type(id, cltype_declaration' copy_scope s d, rs, vis)
+      Sig_module(id, pres, subst_lazy_module_decl scoping s d, rs, vis)
+  | Sig_modtype(id, d, vis) ->
+      Sig_modtype(id, subst_lazy_modtype_decl scoping s d, vis)
+  | Sig_class(id, d, rs, vis) ->
+      Sig_class(id, class_declaration' copy_scope s d, rs, vis)
+  | Sig_class_type(id, d, rs, vis) ->
+      Sig_class_type(id, cltype_declaration' copy_scope s d, rs, vis)
 
 and force_signature_item = function
-  | SigL_value(id, vd, vis) -> Sig_value(id, vd, vis)
-  | SigL_type(id, d, rs, vis) -> Sig_type(id, d, rs, vis)
-  | SigL_typext(id, ext, es, vis) -> Sig_typext(id, ext, es, vis)
-  | SigL_module(id, pres, d, rs, vis) ->
-     Sig_module(id, pres, force_module_decl d, rs, vis)
-  | SigL_modtype(id, d, vis) ->
-     Sig_modtype (id, force_modtype_decl d, vis)
-  | SigL_class(id, d, rs, vis) -> Sig_class(id, d, rs, vis)
-  | SigL_class_type(id, d, rs, vis) -> Sig_class_type(id, d, rs, vis)
+  | Sig_value(id, vd, vis) -> Types.Sig_value(id, vd, vis)
+  | Sig_type(id, d, rs, vis) -> Types.Sig_type(id, d, rs, vis)
+  | Sig_typext(id, ext, es, vis) -> Types.Sig_typext(id, ext, es, vis)
+  | Sig_module(id, pres, d, rs, vis) ->
+    Types.Sig_module(id, pres, force_module_decl d, rs, vis)
+  | Sig_modtype(id, d, vis) ->
+    Types.Sig_modtype (id, force_modtype_decl d, vis)
+  | Sig_class(id, d, rs, vis) -> Types.Sig_class(id, d, rs, vis)
+  | Sig_class_type(id, d, rs, vis) -> Types.Sig_class_type(id, d, rs, vis)
 
 and modtype scoping s t =
   t |> lazy_modtype |> subst_lazy_modtype scoping s |> force_modtype
@@ -754,8 +716,8 @@ module Lazy = struct
   let of_module_decl = lazy_module_decl
   let of_modtype = lazy_modtype
   let of_modtype_decl = lazy_modtype_decl
-  let of_signature sg = Lazy_backtrack.create_forced (S_eager sg)
-  let of_signature_items sg = Lazy_backtrack.create_forced (S_lazy sg)
+  let of_signature sg = Lazy_backtrack.create (Keep, None, lazy (List.map lazy_signature_item sg))
+  let of_signature_items sg = Lazy_backtrack.create_forced sg
   let of_signature_item = lazy_signature_item
   let of_functor_parameter = lazy_functor_parameter
 
