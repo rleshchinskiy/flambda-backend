@@ -437,8 +437,7 @@ type scoping =
   | Make_local
   | Rescope of int
 
-module Lazy_types = struct
-  module Pod : sig
+  module Lazy_pod : sig
     type subst = t
     type 'a t
 
@@ -476,10 +475,12 @@ module Lazy_types = struct
       in
       subst (Lazy.force x))
   end
-
-  include Types.Make(Pod)
+  
+module Lazy_types = struct
+  include Types.Make(Lazy_pod)
 end
 open Lazy_types
+module Pod = Lazy_pod
 
 let rename_bound_idents scoping s sg =
   let rename =
@@ -759,6 +760,7 @@ let subst_lazy_signature_item scoping s comp =
 
 module Lazy = struct
   include Lazy_types
+  module Pod = Lazy_pod
 
   let of_lazy = Pod.from_lazy
 

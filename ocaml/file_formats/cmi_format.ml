@@ -52,25 +52,25 @@ type cmi_infos = {
 }
 
 module Deserialize = struct 
-  module Deser = Types.Map_pods2(Serialized_pod)(Subst.Lazy.Pod)
+  module Mapper = Types.Map_pods(Serialized)(Subst.Lazy)
 
   let deserialize data =
-    let signature fn n =
+    let map_signature fn n =
       let sg = lazy(
         let items = Marshal.from_bytes data n in
-        List.map (Deser.signature_item fn) items)
+        List.map (Mapper.signature_item fn) items)
       in
       Subst.Lazy.of_lazy_signature_items sg
     in
-    let type_expr _ n =
+    let map_type_expr _ n =
       let ty = lazy(Marshal.from_bytes data n : Types.type_expr) in
       Subst.Lazy.of_lazy ty
     in
-    Deser.signature {signature; type_expr}
+    Mapper.signature {map_signature; map_type_expr}
 end
 
 module Serialize = struct
-  module Ser = Types.Map_pods2(Subst.Lazy.Pod)(Serialized_pod)
+  module Mapper = Types.Map_pods(Subst.Lazy)(Serialized)
 
   let serialize oc base =
     let marshal x =
@@ -78,13 +78,13 @@ module Serialize = struct
       Marshal.to_channel oc x [];
       Int64.to_int pos - base
     in
-    let signature fn sg =
+    let map_signature fn sg =
       Subst.Lazy.force_signature_once sg
-      |> List.map (Ser.signature_item fn)
+      |> List.map (Mapper.signature_item fn)
       |> marshal
     in
-    let type_expr _ ty = Subst.Lazy.force_type_expr ty |> marshal in
-    Ser.signature {signature; type_expr}
+    let map_type_expr _ ty = Subst.Lazy.force_type_expr ty |> marshal in
+    Mapper.signature {map_signature; map_type_expr}
 end
     
 let input_cmi ic =
@@ -96,7 +96,7 @@ let input_cmi ic =
   in
   let data_len = Bytes.get_int64_ne (read_bytes 8) 0 |> Int64.to_int in
   let data = read_bytes data_len in
-  let (name, sign) = (input_value ic : Compilation_unit.t * Deserialize.Deser.From.signature) in
+  let (name, sign) = (input_value ic : header) in
   let crcs = (input_value ic : crcs) in
   let flags = (input_value ic : flags) in
   {

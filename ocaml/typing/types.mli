@@ -620,7 +620,9 @@ module type Pod = sig
   type 'a t
 end
 
-module Make(Pod : Pod) : sig
+module type S = sig
+  module Pod : Pod
+
   type value_description =
     { val_type: type_expr Pod.t;                (* Type of the value *)
       val_kind: value_kind;
@@ -668,17 +670,16 @@ module Make(Pod : Pod) : sig
   }
 end
 
-module Map_pods2(P: Pod)(Q: Pod) : sig
-  module From : module type of Make(P)
-  module To : module type of Make(Q)
+module Make(Pod : Pod) : S with module Pod = Pod
 
-  type fn = {
-    signature: fn -> From.signature -> To.signature;
-    type_expr: fn -> type_expr P.t -> type_expr Q.t;
+module Map_pods(M : S)(N : S) : sig
+  type mapper = {
+    map_signature: mapper -> M.signature -> N.signature;
+    map_type_expr: mapper -> type_expr M.Pod.t -> type_expr N.Pod.t;
   }
 
-  val signature: fn -> From.signature -> To.signature
-  val signature_item: fn -> From.signature_item -> To.signature_item
+  val signature: mapper -> M.signature -> N.signature
+  val signature_item: mapper -> M.signature_item -> N.signature_item
 end
 
 include module type of Make(struct type 'a t = 'a end)

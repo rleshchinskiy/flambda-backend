@@ -88,10 +88,9 @@ val compose: t -> t -> t
 val ctype_apply_env_empty:
   (type_expr list -> type_expr -> type_expr list -> type_expr) ref
 
+module Pod : Types.Pod
 
 module Lazy : sig
-  module Pod : Types.Pod
-
   include module type of Types.Make(Pod)
 
   val of_lazy : 'a Lazy.t -> 'a Pod.t
