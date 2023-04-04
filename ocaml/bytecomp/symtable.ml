@@ -404,7 +404,7 @@ open Format
 
 let report_error ppf = function
   | Undefined_global s ->
-      fprintf ppf "Reference to undefined global `%s'" s
+      fprintf ppf "Referenceee to undefined global `%s'" s
   | Unavailable_primitive s ->
       fprintf ppf "The external function `%s' is not available" s
   | Wrong_vm s ->

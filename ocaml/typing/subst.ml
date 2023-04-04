@@ -477,7 +477,7 @@ module Lazy_types = struct
       subst (Lazy.force x))
   end
 
-  include Types.Gen(Pod)
+  include Types.Make(Pod)
 end
 open Lazy_types
 

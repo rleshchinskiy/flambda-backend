@@ -36,27 +36,13 @@ exception Error of error
 type crcs = Import_info.t array  (* smaller on disk than using a list *)
 type flags = pers_flags list
 
-module Serialized = struct
+module Serialized_pod = struct
   type 'a t = int
 end
 
-type header = Compilation_unit.t * Types.Gen(Serialized).signature
+module Serialized = Types.Make(Serialized_pod)
 
-
-(*
-  module type Map_arg = sig
-    module Target : Pod
-    val signature: signature_item list Pod.t -> Gen_types(Target).signature_item list Target.t
-    val type_expr: type_expr Pod.t -> type_expr Target.t
-  end
-*)
-(*
-module Deserialize : Types.Gen(Serialized).Map_arg = struct
-  module Target = Subst.Lazy.Pod
-  let signature = ()
-  let type_expr 
-end
-*)
+type header = Compilation_unit.t * Serialized.signature
 
 type cmi_infos = {
   cmi_name : Compilation_unit.t;
@@ -66,7 +52,7 @@ type cmi_infos = {
 }
 
 module Deserialize = struct 
-  module Deser = Types.Map_pods2(Serialized)(Subst.Lazy.Pod)
+  module Deser = Types.Map_pods2(Serialized_pod)(Subst.Lazy.Pod)
 
   let deserialize data =
     let signature fn n =
@@ -80,13 +66,13 @@ module Deserialize = struct
       let ty = lazy(Marshal.from_bytes data n : Types.type_expr) in
       Subst.Lazy.of_lazy ty
     in
-    Deser.signature {Deser.signature = signature; type_expr = type_expr}
+    Deser.signature {signature; type_expr}
 end
 
 module Serialize = struct
-  module Ser = Types.Map_pods2(Subst.Lazy.Pod)(Serialized)
+  module Ser = Types.Map_pods2(Subst.Lazy.Pod)(Serialized_pod)
 
-  let fn oc base =
+  let serialize oc base =
     let marshal x =
       let pos = Out_channel.pos oc in
       Marshal.to_channel oc x [];
@@ -98,61 +84,7 @@ module Serialize = struct
       |> marshal
     in
     let type_expr _ ty = Subst.Lazy.force_type_expr ty |> marshal in
-    {Ser.signature = signature; type_expr = type_expr}
-
-  let serialize oc base = Ser.signature (fn oc base)
-(*
-   +and write_signature oc base sg =
-+  let item_info =
-+    let open Cmi_format in
-+    function
-+    | Sig_value (id,decl,_) ->
-+      let pres = match decl.val_kind with
-+        | Val_prim _ -> false
-+        | _ -> true
-+      in
-+      CSig_value pres, id
-+    | Sig_type (id,_,_,_) -> CSig_type, id 
-+    | Sig_typext (id,_,_,_) -> CSig_typext, id
-+    | Sig_module (id,pres,md,_,_) ->
-+      let path = match pres with
-+        | Mp_absent -> begin
-+            match md.md_type with
-+            | Mty_alias path -> Some path
-+            | _ -> assert false
-+          end
-+        | Mp_present -> None
-+      in
-+      CSig_module path, id
-+    | Sig_modtype (id,_,_) -> CSig_modtype, id
-+    | Sig_class (id,_,_,_) -> CSig_class, id
-+    | Sig_class_type (id,_,_,_) -> CSig_class_type, id
-+  in
-+  let write_item oc base item =
-+    let item_type,ident = item_info item in
-+    let pos = match item with
-+      Sig_module (id,pres,md,rs,vis) ->
-+        let mty = write_module_type oc base md.md_type in
-+        let pos = Out_channel.pos oc in
-+        let data = (id, pres, rs, vis, mty, md.md_attributes, md.md_loc, md.md_uid) in
-+        Marshal.to_channel oc data [];
-+        pos
-+    | Sig_modtype (id,mtd,vis) ->
-+        let mty = Option.map (write_module_type oc base) mtd.mtd_type in
-+        let pos = Out_channel.pos oc in
-+        let data = (id,vis, mty, mtd.mtd_attributes, mtd.mtd_loc, mtd.mtd_uid) in
-+        Marshal.to_channel oc data [];
-+        pos
-+    | item ->
-+        let pos = Out_channel.pos oc in
-+        Marshal.to_channel oc item [];
-+        pos
-+    in
-+    let offset = Int64.to_int pos - base in
-+    {Cmi_format.item_type; ident; offset}
-+  in
-+  List.map (write_item oc base) sg
-*)
+    Ser.signature {signature; type_expr}
 end
     
 let input_cmi ic =

@@ -92,7 +92,7 @@ val ctype_apply_env_empty:
 module Lazy : sig
   module Pod : Types.Pod
 
-  include module type of Types.Gen(Pod)
+  include module type of Types.Make(Pod)
 
   val of_lazy : 'a Lazy.t -> 'a Pod.t
 
