@@ -22,10 +22,10 @@ type pers_flags =
   | Unsafe_string
 
 type cmi_infos = {
-    cmi_name : Compilation_unit.t;
-    cmi_sign : Types.signature_item list;
-    cmi_crcs : Import_info.t array;
-    cmi_flags : pers_flags list;
+  cmi_name : Compilation_unit.t;
+  cmi_sign : Subst.Lazy.signature;
+  cmi_crcs : Import_info.t array;
+  cmi_flags : pers_flags list;
 }
 
 (* write the magic + the cmi information *)

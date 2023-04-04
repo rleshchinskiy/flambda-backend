@@ -559,11 +559,13 @@ and lazy_value_description descr =
     val_uid = descr.Types.val_uid;
   }
 
+and force_type_expr ty = Pod.force (fun _scoping s ty ->
+  For_copy.with_scope (fun copy_scope ->
+    typexp copy_scope s ty
+  )) ty
+
 and force_value_description descr =
-  { Types.val_type = Pod.force (fun _scoping s ty ->
-      For_copy.with_scope (fun copy_scope ->
-        typexp copy_scope s ty
-      )) descr.val_type;
+  { Types.val_type = force_type_expr descr.val_type;
     Types.val_kind = descr.val_kind;
     Types.val_loc = descr.val_loc;
     Types.val_attributes = descr.val_attributes;
@@ -758,11 +760,15 @@ let subst_lazy_signature_item scoping s comp =
 module Lazy = struct
   include Lazy_types
 
+  let of_lazy = Pod.from_lazy
+
   let of_module_decl = lazy_module_decl
   let of_modtype = lazy_modtype
   let of_modtype_decl = lazy_modtype_decl
   let of_signature sg = Pod.from_lazy (lazy (List.map lazy_signature_item sg))
   let of_signature_items sg = Pod.from_value sg
+  let of_lazy_signature_items sg = Pod.from_lazy sg
+
   let of_signature_item = lazy_signature_item
   let of_functor_parameter = lazy_functor_parameter
   let of_value_description = lazy_value_description
@@ -782,6 +788,7 @@ module Lazy = struct
   let force_signature_item = force_signature_item
   let force_functor_parameter = force_functor_parameter
   let force_value_description = force_value_description
+  let force_type_expr = force_type_expr
 end
 
 let signature sc s sg =

@@ -620,7 +620,7 @@ module type Pod = sig
   type 'a t
 end
 
-module Gen(Pod : Pod) : sig
+module Gen_types(Pod : Pod) : sig
   type value_description =
     { val_type: type_expr Pod.t;                (* Type of the value *)
       val_kind: value_kind;
@@ -666,6 +666,33 @@ module Gen(Pod : Pod) : sig
     mtd_loc: Location.t;
     mtd_uid: Uid.t;
   }
+end
+
+module Gen(Pod: Pod) : sig
+  include module type of Gen_types(Pod)
+  module type Map_arg = sig
+    module Target : Pod
+    val signature: signature_item list Pod.t -> Gen_types(Target).signature_item list Target.t
+    val type_expr: type_expr Pod.t -> type_expr Target.t
+  end
+
+  module Map_pods(M: Map_arg) : sig
+    val signature: signature_item list Pod.t -> Gen_types(M.Target).signature_item list M.Target.t
+    val signature_item: signature_item -> Gen_types(M.Target).signature_item
+  end
+end
+
+module Map_pods2(P: Pod)(Q: Pod) : sig
+  module From : module type of Gen_types(P)
+  module To : module type of Gen_types(Q)
+
+  type fn = {
+    signature: fn -> Gen(P).signature -> Gen(Q).signature;
+    type_expr: fn -> type_expr P.t -> type_expr Q.t;
+  }
+
+  val signature: fn -> Gen(P).signature -> Gen(Q).signature
+  val signature_item: fn -> Gen(P).signature_item -> Gen(Q).signature_item
 end
 
 include module type of Gen(struct type 'a t = 'a end)

@@ -338,7 +338,7 @@ module type Pod = sig
   type 'a t
 end
 
-module Gen(Pod : Pod) = struct
+module Gen_types(Pod : Pod) = struct
   type value_description =
   { val_type: type_expr Pod.t;                (* Type of the value *)
     val_kind: value_kind;
@@ -384,6 +384,139 @@ module Gen(Pod : Pod) = struct
     mtd_loc: Location.t;
     mtd_uid: Uid.t;
   }
+end
+
+module Gen(Pod: Pod) = struct
+  include Gen_types(Pod)
+
+  module type Map_arg = sig
+    module Target : Pod
+    val signature: signature_item list Pod.t -> Gen_types(Target).signature_item list Target.t
+    val type_expr: type_expr Pod.t -> type_expr Target.t
+  end
+
+  module Map_pods(M: Map_arg) = struct
+    module Target_types = Gen_types(M.Target)
+    let signature = M.signature
+
+    let rec module_type = function
+      | Mty_ident p -> Target_types.Mty_ident p
+      | Mty_alias p -> Target_types.Mty_alias p
+      | Mty_functor (parm,mty) ->
+          let parm = match parm with
+            | Unit -> Target_types.Unit
+            | Named (id,mty) -> Target_types.Named (id, module_type mty)
+          in
+          Target_types.Mty_functor (parm, module_type mty)
+      | Mty_signature sg -> Target_types.Mty_signature (signature sg)
+      
+
+    let value_description vd =
+      {
+        Target_types.val_type = M.type_expr vd.val_type;
+        val_kind = vd.val_kind;
+        val_attributes = vd.val_attributes;
+        val_loc = vd.val_loc;
+        val_uid = vd.val_uid;
+      }    
+
+    let module_declaration md =
+      {
+        Target_types.md_type = module_type md.md_type;
+        md_attributes = md.md_attributes;
+        md_loc = md.md_loc;
+        md_uid = md.md_uid;
+      }
+
+    let modtype_declaration mtd =
+      {
+        Target_types.mtd_type = Option.map module_type mtd.mtd_type;
+        mtd_attributes = mtd.mtd_attributes;
+        mtd_loc = mtd.mtd_loc;
+        mtd_uid = mtd.mtd_uid;
+      }
+
+    let signature_item = function
+      | Sig_value (id,vd,vis) ->
+          Target_types.Sig_value (id, value_description vd, vis)
+      | Sig_type (id,td,rs,vis) ->
+          Target_types.Sig_type (id,td,rs,vis)
+      | Sig_module (id,pres,md,rs,vis) ->
+          Target_types.Sig_module (id, pres, module_declaration md, rs, vis)
+      | Sig_modtype (id,mtd,vis) ->
+          Target_types.Sig_modtype (id, modtype_declaration mtd, vis)
+      | Sig_typext (id,ec,es,vis) ->
+          Target_types.Sig_typext (id,ec,es,vis)
+      | Sig_class (id,cd,rs,vis) ->
+          Target_types.Sig_class (id,cd,rs,vis)
+      | Sig_class_type (id,ctd,rs,vis) ->
+          Target_types.Sig_class_type (id,ctd,rs,vis)
+  end
+end
+
+module Map_pods2(P: Pod)(Q: Pod) = struct
+  module From = Gen(P)
+  module To = Gen(Q)
+
+  type fn = {
+    signature: fn -> Gen(P).signature -> Gen(Q).signature;
+    type_expr: fn -> type_expr P.t -> type_expr Q.t;
+  }
+
+  let signature fn = fn.signature fn
+
+  let rec module_type fn = function
+    | From.Mty_ident p -> To.Mty_ident p
+    | From.Mty_alias p -> To.Mty_alias p
+    | From.Mty_functor (parm,mty) ->
+        let parm = match parm with
+          | Unit -> To.Unit
+          | Named (id,mty) -> To.Named (id, module_type fn mty)
+        in
+        To.Mty_functor (parm, module_type fn mty)
+    | From.Mty_signature sg -> To.Mty_signature (signature fn sg)
+    
+
+  let value_description fn vd =
+    {
+      To.val_type = fn.type_expr fn vd.From.val_type;
+      val_kind = vd.From.val_kind;
+      val_attributes = vd.From.val_attributes;
+      val_loc = vd.From.val_loc;
+      val_uid = vd.From.val_uid;
+    }    
+
+  let module_declaration fn md =
+    {
+      To.md_type = module_type fn md.From.md_type;
+      md_attributes = md.From.md_attributes;
+      md_loc = md.From.md_loc;
+      md_uid = md.From.md_uid;
+    }
+
+  let modtype_declaration fn mtd =
+    {
+      To.mtd_type = Option.map (module_type fn) mtd.From.mtd_type;
+      mtd_attributes = mtd.From.mtd_attributes;
+      mtd_loc = mtd.From.mtd_loc;
+      mtd_uid = mtd.From.mtd_uid;
+    }
+
+  let signature_item fn = function
+    | From.Sig_value (id,vd,vis) ->
+        To.Sig_value (id, value_description fn vd, vis)
+    | From.Sig_type (id,td,rs,vis) ->
+        To.Sig_type (id,td,rs,vis)
+    | From.Sig_module (id,pres,md,rs,vis) ->
+        To.Sig_module (id, pres, module_declaration fn md, rs, vis)
+    | From.Sig_modtype (id,mtd,vis) ->
+        To.Sig_modtype (id, modtype_declaration fn mtd, vis)
+    | From.Sig_typext (id,ec,es,vis) ->
+        To.Sig_typext (id,ec,es,vis)
+    | From.Sig_class (id,cd,rs,vis) ->
+        To.Sig_class (id,cd,rs,vis)
+    | From.Sig_class_type (id,ctd,rs,vis) ->
+        To.Sig_class_type (id,ctd,rs,vis)
 end
 
 include Gen(struct type 'a t = 'a end)

@@ -94,11 +94,14 @@ module Lazy : sig
 
   include module type of Types.Gen(Pod)
 
+  val of_lazy : 'a Lazy.t -> 'a Pod.t
+
   val of_module_decl : Types.module_declaration -> module_declaration
   val of_modtype : Types.module_type -> module_type
   val of_modtype_decl : Types.modtype_declaration -> modtype_declaration
   val of_signature : Types.signature -> signature
   val of_signature_items : signature_item list -> signature
+  val of_lazy_signature_items : signature_item list Lazy.t -> signature
   val of_signature_item : Types.signature_item -> signature_item
   val of_functor_parameter : Types.functor_parameter -> functor_parameter
   val of_value_description : Types.value_description -> value_description
@@ -118,4 +121,5 @@ module Lazy : sig
   val force_signature_item : signature_item -> Types.signature_item
   val force_functor_parameter : functor_parameter -> Types.functor_parameter
   val force_value_description : value_description -> Types.value_description
+  val force_type_expr : type_expr Pod.t -> type_expr
 end
