@@ -450,14 +450,13 @@ module Map_pods(M : S)(N : S) = struct
     | M.Mty_ident p -> N.Mty_ident p
     | M.Mty_alias p -> N.Mty_alias p
     | M.Mty_functor (parm,mty) ->
-        let parm = match parm with
-          | Unit -> N.Unit
-          | Named (id,mty) -> N.Named (id, module_type m mty)
-        in
-        N.Mty_functor (parm, module_type m mty)
+        N.Mty_functor (functor_parameter m parm, module_type m mty)
     | M.Mty_signature sg -> N.Mty_signature (signature m sg)
-    
 
+  and functor_parameter m = function
+      | M.Unit -> N.Unit
+      | M.Named (id,mty) -> N.Named (id, module_type m mty)
+    
   let value_description m M.{val_type; val_kind; val_attributes; val_loc; val_uid} =
     N.{
       val_type = m.map_type_expr m val_type;
@@ -492,6 +491,71 @@ module Map_pods(M : S)(N : S) = struct
         N.Sig_module (id, pres, module_declaration m md, rs, vis)
     | M.Sig_modtype (id,mtd,vis) ->
         N.Sig_modtype (id, modtype_declaration m mtd, vis)
+    | M.Sig_typext (id,ec,es,vis) ->
+        N.Sig_typext (id,ec,es,vis)
+    | M.Sig_class (id,cd,rs,vis) ->
+        N.Sig_class (id,cd,rs,vis)
+    | M.Sig_class_type (id,ctd,rs,vis) ->
+        N.Sig_class_type (id,ctd,rs,vis)
+end
+
+module type Pod_mapper = sig
+  module M : S
+  module N : S
+  val map_signature: (M.signature_item -> N.signature_item) -> M.signature -> N.signature
+  val map_type_expr: type_expr M.Pod.t -> type_expr N.Pod.t
+end
+
+module Map_pods2(Mapper : Pod_mapper) = struct
+  module M = Mapper.M
+  module N = Mapper.N
+
+  let rec signature sg = Mapper.map_signature signature_item sg
+  and module_type = function
+    | M.Mty_ident p -> N.Mty_ident p
+    | M.Mty_alias p -> N.Mty_alias p
+    | M.Mty_functor (parm,mty) ->
+        N.Mty_functor (functor_parameter parm, module_type mty)
+    | M.Mty_signature sg -> N.Mty_signature (signature sg)
+
+  and functor_parameter = function
+      | M.Unit -> N.Unit
+      | M.Named (id,mty) -> N.Named (id, module_type mty)
+    
+  and value_description M.{val_type; val_kind; val_attributes; val_loc; val_uid} =
+    N.{
+      val_type = Mapper.map_type_expr val_type;
+      val_kind;
+      val_attributes;
+      val_loc;
+      val_uid
+    }    
+
+  and module_declaration M.{md_type; md_attributes; md_loc; md_uid} =
+    N.{
+      md_type = module_type md_type;
+      md_attributes = md_attributes;
+      md_loc = md_loc;
+      md_uid = md_uid;
+    }
+
+  and modtype_declaration mtd =
+    {
+      N.mtd_type = Option.map module_type mtd.M.mtd_type;
+      mtd_attributes = mtd.M.mtd_attributes;
+      mtd_loc = mtd.M.mtd_loc;
+      mtd_uid = mtd.M.mtd_uid;
+    }
+
+  and signature_item = function
+    | M.Sig_value (id,vd,vis) ->
+        N.Sig_value (id, value_description vd, vis)
+    | M.Sig_type (id,td,rs,vis) ->
+        N.Sig_type (id,td,rs,vis)
+    | M.Sig_module (id,pres,md,rs,vis) ->
+        N.Sig_module (id, pres, module_declaration md, rs, vis)
+    | M.Sig_modtype (id,mtd,vis) ->
+        N.Sig_modtype (id, modtype_declaration mtd, vis)
     | M.Sig_typext (id,ec,es,vis) ->
         N.Sig_typext (id,ec,es,vis)
     | M.Sig_class (id,cd,rs,vis) ->

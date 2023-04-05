@@ -678,8 +678,30 @@ module Map_pods(M : S)(N : S) : sig
     map_type_expr: mapper -> type_expr M.Pod.t -> type_expr N.Pod.t;
   }
 
+  val value_description: mapper -> M.value_description -> N.value_description
+  val module_declaration: mapper -> M.module_declaration -> N.module_declaration
+  val modtype_declaration: mapper -> M.modtype_declaration -> N.modtype_declaration
+  val module_type: mapper -> M.module_type -> N.module_type
   val signature: mapper -> M.signature -> N.signature
   val signature_item: mapper -> M.signature_item -> N.signature_item
+  val functor_parameter: mapper -> M.functor_parameter -> N.functor_parameter
+end
+
+module type Pod_mapper = sig
+  module M : S
+  module N : S
+  val map_signature: (M.signature_item -> N.signature_item) -> M.signature -> N.signature
+  val map_type_expr: type_expr M.Pod.t -> type_expr N.Pod.t
+end
+
+module Map_pods2(M : Pod_mapper) : sig
+  val value_description: M.M.value_description -> M.N.value_description
+  val module_declaration: M.M.module_declaration -> M.N.module_declaration
+  val modtype_declaration: M.M.modtype_declaration -> M.N.modtype_declaration
+  val module_type: M.M.module_type -> M.N.module_type
+  val signature: M.M.signature -> M.N.signature
+  val signature_item: M.M.signature_item -> M.N.signature_item
+  val functor_parameter: M.M.functor_parameter -> M.N.functor_parameter
 end
 
 include module type of Make(struct type 'a t = 'a end)

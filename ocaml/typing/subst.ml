@@ -437,48 +437,46 @@ type scoping =
   | Make_local
   | Rescope of int
 
-  module Lazy_pod : sig
-    type subst = t
-    type 'a t
+module Lazy_pod : sig
+  type subst = t
+  type 'a t
 
-    val from_value : 'a -> 'a t
-    val from_lazy : 'a Lazy.t -> 'a t
-    val force : (scoping -> subst -> 'a -> 'a) -> 'a t -> 'a
-    val substitute : compose:(subst -> subst -> subst) -> scoping -> subst -> 'a t -> 'a t
-  end = struct
-    type subst = t
-    type 'a t = (scoping * subst option * 'a Lazy.t, 'a) Lazy_backtrack.t
+  val from_value : 'a -> 'a t
+  val from_lazy : 'a Lazy.t -> 'a t
+  val force : (scoping -> subst -> 'a -> 'a) -> 'a t -> 'a
+  val substitute : compose:(subst -> subst -> subst) -> scoping -> subst -> 'a t -> 'a t
+end = struct
+  type subst = t
+  type 'a t = (scoping * subst option * 'a Lazy.t, 'a) Lazy_backtrack.t
 
 
-    let from_value = Lazy_backtrack.create_forced
-    let from_lazy x = Lazy_backtrack.create (Keep, None, x)
+  let from_value = Lazy_backtrack.create_forced
+  let from_lazy x = Lazy_backtrack.create (Keep, None, x)
 
-    let substitute ~compose scoping s x =
-      match Lazy_backtrack.get_contents x with
-      | Left (_, None, x) ->
+  let substitute ~compose scoping s x =
+    match Lazy_backtrack.get_contents x with
+    | Left (_, None, x) ->
+      Lazy_backtrack.create (scoping, Some s, x)
+    | Left (scoping', Some s', x) ->
+        let scoping =
+          match scoping', scoping with
+          | sc, Keep -> sc
+          | _, (Make_local|Rescope _) -> scoping
+        in
+        let s = compose s' s in
         Lazy_backtrack.create (scoping, Some s, x)
-      | Left (scoping', Some s', x) ->
-         let scoping =
-           match scoping', scoping with
-           | sc, Keep -> sc
-           | _, (Make_local|Rescope _) -> scoping
-         in
-         let s = compose s' s in
-         Lazy_backtrack.create (scoping, Some s, x)
-      | Right x ->
-         Lazy_backtrack.create (scoping, Some s, Lazy.from_val x)
-  
-    let force f = Lazy_backtrack.force (fun (scoping, s, x) ->
-      let subst = match s with
-        | Some s -> f scoping s
-        | None -> Fun.id
-      in
-      subst (Lazy.force x))
-  end
-  
-module Lazy_types = struct
-  include Types.Make(Lazy_pod)
+    | Right x ->
+        Lazy_backtrack.create (scoping, Some s, Lazy.from_val x)
+
+  let force f = Lazy_backtrack.force (fun (scoping, s, x) ->
+    let subst = match s with
+      | Some s -> f scoping s
+      | None -> Fun.id
+    in
+    subst (Lazy.force x))
 end
+  
+module Lazy_types = Types.Make(Lazy_pod)
 open Lazy_types
 module Pod = Lazy_pod
 
@@ -544,6 +542,44 @@ let rec value_description' copy_scope s descr =
    }
 *)
 
+(*
+module To_lazy = Types.Map_pods(Types)(Lazy_types)
+
+let to_lazy_mapper =
+  let map_signature m sg =
+    let items = lazy (List.map (To_lazy.signature_item m) sg) in
+    Pod.from_lazy items
+  in
+  let map_type_expr _ = Pod.from_value in
+  To_lazy.{map_signature; map_type_expr}
+
+let lazy_value_description = To_lazy.value_description to_lazy_mapper
+let lazy_module_decl = To_lazy.module_declaration to_lazy_mapper
+let lazy_functor_parameter = To_lazy.functor_parameter to_lazy_mapper
+let lazy_modtype = To_lazy.module_type to_lazy_mapper
+let lazy_modtype_decl = To_lazy.modtype_declaration to_lazy_mapper
+let lazy_signature_item = To_lazy.signature_item to_lazy_mapper
+*)
+
+module To_lazy = Types.Map_pods2(struct
+  module M = Types
+  module N = Lazy_types
+  let map_signature f sg =
+    let items = lazy (List.map f sg) in
+    Pod.from_lazy items
+  let map_type_expr = Pod.from_value
+end)
+
+let lazy_value_description = To_lazy.value_description
+let lazy_module_decl = To_lazy.module_declaration
+let lazy_functor_parameter = To_lazy.functor_parameter
+let lazy_modtype = To_lazy.module_type
+let lazy_modtype_decl = To_lazy.modtype_declaration
+let lazy_signature_item = To_lazy.signature_item
+
+
+module From_lazy = Types.Map_pods(Lazy_types)(Types)
+
 let rec subst_lazy_value_description s descr =
   { val_type = Pod.substitute ~compose Keep s descr.val_type;
     val_kind = descr.val_kind;
@@ -552,32 +588,10 @@ let rec subst_lazy_value_description s descr =
     val_uid = descr.val_uid;
   }
     
-and lazy_value_description descr =
-  { val_type = Pod.from_value descr.Types.val_type;
-    val_kind = descr.Types.val_kind;
-    val_loc = descr.Types.val_loc;
-    val_attributes = descr.Types.val_attributes;
-    val_uid = descr.Types.val_uid;
-  }
-
 and force_type_expr ty = Pod.force (fun _scoping s ty ->
   For_copy.with_scope (fun copy_scope ->
     typexp copy_scope s ty
   )) ty
-
-and force_value_description descr =
-  { Types.val_type = force_type_expr descr.val_type;
-    Types.val_kind = descr.val_kind;
-    Types.val_loc = descr.val_loc;
-    Types.val_attributes = descr.val_attributes;
-    Types.val_uid = descr.val_uid;
-  }
-
-and lazy_module_decl md =
-  { md_type = lazy_modtype md.Types.md_type;
-    md_attributes = md.Types.md_attributes;
-    md_loc = md.Types.md_loc;
-    md_uid = md.Types.md_uid }
 
 and subst_lazy_module_decl scoping s md =
   let md_type = subst_lazy_modtype scoping s md.md_type in
@@ -585,29 +599,6 @@ and subst_lazy_module_decl scoping s md =
     md_attributes = attrs s md.md_attributes;
     md_loc = loc s md.md_loc;
     md_uid = md.md_uid }
-
-and force_module_decl md =
-  let md_type = force_modtype md.md_type in
-  { Types.md_type;
-    md_attributes = md.md_attributes;
-    md_loc = md.md_loc;
-    md_uid = md.md_uid }
-
-and lazy_functor_parameter = function
-| Types.Unit -> Unit
-| Types.Named (id, mty) -> Named (id, lazy_modtype mty)
-
-and force_functor_parameter = function
-| Unit -> Types.Unit
-| Named (id, mty) -> Types.Named (id, force_modtype mty)
-
-and lazy_modtype = function
-  | Types.Mty_ident p -> Mty_ident p
-  | Types.Mty_signature sg ->
-     Mty_signature (Pod.from_lazy (lazy (List.map lazy_signature_item sg)))
-  | Types.Mty_functor (param, mty) ->
-     Mty_functor (lazy_functor_parameter param, lazy_modtype mty)
-  | Types.Mty_alias p -> Mty_alias p
 
 and subst_lazy_modtype scoping s = function
   | Mty_ident p ->
@@ -636,38 +627,14 @@ and subst_lazy_modtype scoping s = function
   | Mty_alias p ->
       Mty_alias (module_path s p)
 
-and force_modtype = function
-  | Mty_ident p -> Types.Mty_ident p
-  | Mty_signature sg -> Types.Mty_signature (force_signature sg)
-  | Mty_functor (param, res) ->
-     Types.Mty_functor (force_functor_parameter param, force_modtype res)
-  | Mty_alias p -> Types.Mty_alias p
-
-and lazy_modtype_decl mtd =
-  let mtd_type = Option.map lazy_modtype mtd.Types.mtd_type in
-  { mtd_type;
-    mtd_attributes = mtd.Types.mtd_attributes;
-    mtd_loc = mtd.Types.mtd_loc;
-    mtd_uid = mtd.Types.mtd_uid }
-
 and subst_lazy_modtype_decl scoping s mtd =
   { mtd_type = Option.map (subst_lazy_modtype scoping s) mtd.mtd_type;
     mtd_attributes = attrs s mtd.mtd_attributes;
     mtd_loc = loc s mtd.mtd_loc;
     mtd_uid = mtd.mtd_uid }
 
-and force_modtype_decl mtd =
-  let mtd_type = Option.map force_modtype mtd.mtd_type in
-  { Types.mtd_type;
-    mtd_attributes = mtd.mtd_attributes;
-    mtd_loc = mtd.mtd_loc;
-    mtd_uid = mtd.mtd_uid }
-
 and subst_lazy_signature scoping s sg =
   Pod.substitute ~compose scoping s sg
-
-and force_signature sg =
-  List.map force_signature_item (force_signature_once sg)
 
 and force_signature_once sg =
   Pod.force force_signature_once' sg
@@ -681,22 +648,6 @@ and force_signature_once' scoping s sg =
   For_copy.with_scope (fun copy_scope ->
     List.rev_map (subst_lazy_signature_item' copy_scope scoping s') sg'
   )
-
-and lazy_signature_item = function
-  | Types.Sig_value(id, d, vis) ->
-     Sig_value(id, lazy_value_description d, vis)
-  | Types.Sig_type(id, d, rs, vis) ->
-     Sig_type(id, d, rs, vis)
-  | Types.Sig_typext(id, ext, es, vis) ->
-     Sig_typext(id, ext, es, vis)
-  | Types.Sig_module(id, res, d, rs, vis) ->
-     Sig_module(id, res, lazy_module_decl d, rs, vis)
-  | Types.Sig_modtype(id, d, vis) ->
-     Sig_modtype(id, lazy_modtype_decl d, vis)
-  | Types.Sig_class(id, d, rs, vis) ->
-     Sig_class(id, d, rs, vis)
-  | Types.Sig_class_type(id, d, rs, vis) ->
-     Sig_class_type(id, d, rs, vis)
 
 and subst_lazy_signature_item' copy_scope scoping s comp =
   match comp with
@@ -718,17 +669,6 @@ and subst_lazy_signature_item' copy_scope scoping s comp =
       Sig_class(id, class_declaration' copy_scope s d, rs, vis)
   | Sig_class_type(id, d, rs, vis) ->
       Sig_class_type(id, cltype_declaration' copy_scope s d, rs, vis)
-
-and force_signature_item = function
-  | Sig_value(id, vd, vis) -> Types.Sig_value(id, force_value_description vd, vis)
-  | Sig_type(id, d, rs, vis) -> Types.Sig_type(id, d, rs, vis)
-  | Sig_typext(id, ext, es, vis) -> Types.Sig_typext(id, ext, es, vis)
-  | Sig_module(id, pres, d, rs, vis) ->
-    Types.Sig_module(id, pres, force_module_decl d, rs, vis)
-  | Sig_modtype(id, d, vis) ->
-    Types.Sig_modtype (id, force_modtype_decl d, vis)
-  | Sig_class(id, d, rs, vis) -> Types.Sig_class(id, d, rs, vis)
-  | Sig_class_type(id, d, rs, vis) -> Types.Sig_class_type(id, d, rs, vis)
 
 and modtype scoping s t =
   t |> lazy_modtype |> subst_lazy_modtype scoping s |> force_modtype
@@ -753,7 +693,22 @@ and compose s1 s2 =
       in
       s2.last_compose <- Some (s1,s); s
 
+and from_lazy_mapper =
+  let map_signature m sg =
+    let items = force_signature_once sg in
+    List.map (From_lazy.signature_item m) items
+  in
+  let map_type_expr _ = force_type_expr in
+  From_lazy.{map_signature; map_type_expr}
 
+and force_value_description vd = From_lazy.value_description from_lazy_mapper vd
+and force_module_decl d = From_lazy.module_declaration from_lazy_mapper d
+and force_functor_parameter x = From_lazy.functor_parameter from_lazy_mapper x
+and force_modtype x = From_lazy.module_type from_lazy_mapper x
+and force_modtype_decl x = From_lazy.modtype_declaration from_lazy_mapper x
+and force_signature_item x = From_lazy.signature_item from_lazy_mapper x
+and force_signature x = From_lazy.signature from_lazy_mapper x
+      
 let subst_lazy_signature_item scoping s comp =
   For_copy.with_scope
     (fun copy_scope -> subst_lazy_signature_item' copy_scope scoping s comp)
