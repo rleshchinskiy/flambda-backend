@@ -437,7 +437,7 @@ type scoping =
   | Make_local
   | Rescope of int
 
-module Lazy_pod : sig
+module Pod : sig
   type subst = t
   type 'a t
 
@@ -476,9 +476,8 @@ end = struct
     subst (Lazy.force x))
 end
   
-module Lazy_types = Types.Make(Lazy_pod)
+module Lazy_types = Types.Make(Pod)
 open Lazy_types
-module Pod = Lazy_pod
 
 let rename_bound_idents scoping s sg =
   let rename =
@@ -532,51 +531,21 @@ let rename_bound_idents scoping s sg =
   in
   rename_bound_idents s [] sg
 
-(*
-let rec value_description' copy_scope s descr =
-  { val_type = typexp copy_scope s descr.val_type;
-    val_kind = descr.val_kind;
-    val_loc = loc s descr.val_loc;
-    val_attributes = attrs s descr.val_attributes;
-    val_uid = descr.val_uid;
-   }
-*)
-
-(*
 module To_lazy = Types.Map_pods(Types)(Lazy_types)
 
-let to_lazy_mapper =
+let to_lazy =
   let map_signature m sg =
-    let items = lazy (List.map (To_lazy.signature_item m) sg) in
-    Pod.from_lazy items
+    lazy (List.map (To_lazy.signature_item m) sg) |> Pod.from_lazy
   in
   let map_type_expr _ = Pod.from_value in
   To_lazy.{map_signature; map_type_expr}
 
-let lazy_value_description = To_lazy.value_description to_lazy_mapper
-let lazy_module_decl = To_lazy.module_declaration to_lazy_mapper
-let lazy_functor_parameter = To_lazy.functor_parameter to_lazy_mapper
-let lazy_modtype = To_lazy.module_type to_lazy_mapper
-let lazy_modtype_decl = To_lazy.modtype_declaration to_lazy_mapper
-let lazy_signature_item = To_lazy.signature_item to_lazy_mapper
-*)
-
-module To_lazy = Types.Map_pods2(struct
-  module M = Types
-  module N = Lazy_types
-  let map_signature f sg =
-    let items = lazy (List.map f sg) in
-    Pod.from_lazy items
-  let map_type_expr = Pod.from_value
-end)
-
-let lazy_value_description = To_lazy.value_description
-let lazy_module_decl = To_lazy.module_declaration
-let lazy_functor_parameter = To_lazy.functor_parameter
-let lazy_modtype = To_lazy.module_type
-let lazy_modtype_decl = To_lazy.modtype_declaration
-let lazy_signature_item = To_lazy.signature_item
-
+let lazy_value_description = To_lazy.value_description to_lazy
+let lazy_module_decl = To_lazy.module_declaration to_lazy
+let lazy_functor_parameter = To_lazy.functor_parameter to_lazy
+let lazy_modtype = To_lazy.module_type to_lazy
+let lazy_modtype_decl = To_lazy.modtype_declaration to_lazy
+let lazy_signature_item = To_lazy.signature_item to_lazy
 
 module From_lazy = Types.Map_pods(Lazy_types)(Types)
 
@@ -693,7 +662,7 @@ and compose s1 s2 =
       in
       s2.last_compose <- Some (s1,s); s
 
-and from_lazy_mapper =
+and from_lazy =
   let map_signature m sg =
     let items = force_signature_once sg in
     List.map (From_lazy.signature_item m) items
@@ -701,13 +670,13 @@ and from_lazy_mapper =
   let map_type_expr _ = force_type_expr in
   From_lazy.{map_signature; map_type_expr}
 
-and force_value_description vd = From_lazy.value_description from_lazy_mapper vd
-and force_module_decl d = From_lazy.module_declaration from_lazy_mapper d
-and force_functor_parameter x = From_lazy.functor_parameter from_lazy_mapper x
-and force_modtype x = From_lazy.module_type from_lazy_mapper x
-and force_modtype_decl x = From_lazy.modtype_declaration from_lazy_mapper x
-and force_signature_item x = From_lazy.signature_item from_lazy_mapper x
-and force_signature x = From_lazy.signature from_lazy_mapper x
+and force_value_description vd = From_lazy.value_description from_lazy vd
+and force_module_decl d = From_lazy.module_declaration from_lazy d
+and force_functor_parameter x = From_lazy.functor_parameter from_lazy x
+and force_modtype x = From_lazy.module_type from_lazy x
+and force_modtype_decl x = From_lazy.modtype_declaration from_lazy x
+and force_signature_item x = From_lazy.signature_item from_lazy x
+and force_signature x = From_lazy.signature from_lazy x
       
 let subst_lazy_signature_item scoping s comp =
   For_copy.with_scope
@@ -715,7 +684,6 @@ let subst_lazy_signature_item scoping s comp =
 
 module Lazy = struct
   include Lazy_types
-  module Pod = Lazy_pod
 
   let of_lazy = Pod.from_lazy
 

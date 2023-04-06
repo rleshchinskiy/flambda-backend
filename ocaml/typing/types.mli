@@ -621,10 +621,10 @@ module type Pod = sig
 end
 
 module type S = sig
-  module Pod : Pod
+  type 'a pod
 
   type value_description =
-    { val_type: type_expr Pod.t;                (* Type of the value *)
+    { val_type: type_expr pod;                (* Type of the value *)
       val_kind: value_kind;
       val_loc: Location.t;
       val_attributes: Parsetree.attributes;
@@ -641,7 +641,7 @@ module type S = sig
   | Unit
   | Named of Ident.t option * module_type
 
-  and signature = signature_item list Pod.t
+  and signature = signature_item list pod
 
   and signature_item =
     Sig_value of Ident.t * value_description * visibility
@@ -670,38 +670,21 @@ module type S = sig
   }
 end
 
-module Make(Pod : Pod) : S with module Pod = Pod
+module Make(Pod : Pod) : S with type 'a pod = 'a Pod.t
 
-module Map_pods(M : S)(N : S) : sig
+module Map_pods(From : S)(To : S) : sig
   type mapper = {
-    map_signature: mapper -> M.signature -> N.signature;
-    map_type_expr: mapper -> type_expr M.Pod.t -> type_expr N.Pod.t;
+    map_signature: mapper -> From.signature -> To.signature;
+    map_type_expr: mapper -> type_expr From.pod -> type_expr To.pod
   }
 
-  val value_description: mapper -> M.value_description -> N.value_description
-  val module_declaration: mapper -> M.module_declaration -> N.module_declaration
-  val modtype_declaration: mapper -> M.modtype_declaration -> N.modtype_declaration
-  val module_type: mapper -> M.module_type -> N.module_type
-  val signature: mapper -> M.signature -> N.signature
-  val signature_item: mapper -> M.signature_item -> N.signature_item
-  val functor_parameter: mapper -> M.functor_parameter -> N.functor_parameter
-end
-
-module type Pod_mapper = sig
-  module M : S
-  module N : S
-  val map_signature: (M.signature_item -> N.signature_item) -> M.signature -> N.signature
-  val map_type_expr: type_expr M.Pod.t -> type_expr N.Pod.t
-end
-
-module Map_pods2(M : Pod_mapper) : sig
-  val value_description: M.M.value_description -> M.N.value_description
-  val module_declaration: M.M.module_declaration -> M.N.module_declaration
-  val modtype_declaration: M.M.modtype_declaration -> M.N.modtype_declaration
-  val module_type: M.M.module_type -> M.N.module_type
-  val signature: M.M.signature -> M.N.signature
-  val signature_item: M.M.signature_item -> M.N.signature_item
-  val functor_parameter: M.M.functor_parameter -> M.N.functor_parameter
+  val value_description: mapper -> From.value_description -> To.value_description
+  val module_declaration: mapper -> From.module_declaration -> To.module_declaration
+  val modtype_declaration: mapper -> From.modtype_declaration -> To.modtype_declaration
+  val module_type: mapper -> From.module_type -> To.module_type
+  val signature: mapper -> From.signature -> To.signature
+  val signature_item: mapper -> From.signature_item -> To.signature_item
+  val functor_parameter: mapper -> From.functor_parameter -> To.functor_parameter
 end
 
 include module type of Make(struct type 'a t = 'a end)

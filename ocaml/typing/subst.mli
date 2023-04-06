@@ -88,12 +88,10 @@ val compose: t -> t -> t
 val ctype_apply_env_empty:
   (type_expr list -> type_expr -> type_expr list -> type_expr) ref
 
-module Pod : Types.Pod
-
 module Lazy : sig
-  include module type of Types.Make(Pod)
+  include Types.S
 
-  val of_lazy : 'a Lazy.t -> 'a Pod.t
+  val of_lazy : 'a Lazy.t -> 'a pod
 
   val of_module_decl : Types.module_declaration -> module_declaration
   val of_modtype : Types.module_type -> module_type
@@ -120,5 +118,5 @@ module Lazy : sig
   val force_signature_item : signature_item -> Types.signature_item
   val force_functor_parameter : functor_parameter -> Types.functor_parameter
   val force_value_description : value_description -> Types.value_description
-  val force_type_expr : type_expr Pod.t -> type_expr
+  val force_type_expr : type_expr pod -> type_expr
 end

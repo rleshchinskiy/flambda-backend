@@ -36,11 +36,7 @@ exception Error of error
 type crcs = Import_info.t array  (* smaller on disk than using a list *)
 type flags = pers_flags list
 
-module Serialized_pod = struct
-  type 'a t = int
-end
-
-module Serialized = Types.Make(Serialized_pod)
+module Serialized = Types.Make(struct type 'a t = int end)
 
 type header = Compilation_unit.t * Serialized.signature
 
@@ -51,41 +47,35 @@ type cmi_infos = {
   cmi_flags : pers_flags list;
 }
 
-module Deserialize = struct 
-  module Mapper = Types.Map_pods(Serialized)(Subst.Lazy)
+module Deserialize = Types.Map_pods(Serialized)(Subst.Lazy)
 
-  let deserialize data =
-    let map_signature fn n =
-      let sg = lazy(
-        let items = Marshal.from_bytes data n in
-        List.map (Mapper.signature_item fn) items)
-      in
-      Subst.Lazy.of_lazy_signature_items sg
-    in
-    let map_type_expr _ n =
-      let ty = lazy(Marshal.from_bytes data n : Types.type_expr) in
-      Subst.Lazy.of_lazy ty
-    in
-    Mapper.signature {map_signature; map_type_expr}
-end
+let deserialize data =
+  let map_signature fn n =
+    lazy(
+      Marshal.from_bytes data n
+      |> List.map (Deserialize.signature_item fn))
+    |> Subst.Lazy.of_lazy_signature_items
+  in
+  let map_type_expr _ n =
+    lazy(Marshal.from_bytes data n : Types.type_expr) |> Subst.Lazy.of_lazy
+  in
+  Deserialize.signature {map_signature; map_type_expr}
 
-module Serialize = struct
-  module Mapper = Types.Map_pods(Subst.Lazy)(Serialized)
+module Serialize = Types.Map_pods(Subst.Lazy)(Serialized)
 
-  let serialize oc base =
-    let marshal x =
-      let pos = Out_channel.pos oc in
-      Marshal.to_channel oc x [];
-      Int64.to_int pos - base
-    in
-    let map_signature fn sg =
-      Subst.Lazy.force_signature_once sg
-      |> List.map (Mapper.signature_item fn)
-      |> marshal
-    in
-    let map_type_expr _ ty = Subst.Lazy.force_type_expr ty |> marshal in
-    Mapper.signature {map_signature; map_type_expr}
-end
+let serialize oc base =
+  let marshal x =
+    let pos = Out_channel.pos oc in
+    Marshal.to_channel oc x [];
+    Int64.to_int pos - base
+  in
+  let map_signature fn sg =
+    Subst.Lazy.force_signature_once sg
+    |> List.map (Serialize.signature_item fn)
+    |> marshal
+  in
+  let map_type_expr _ ty = Subst.Lazy.force_type_expr ty |> marshal in
+  Serialize.signature {map_signature; map_type_expr}
     
 let input_cmi ic =
   let read_bytes n =
@@ -101,7 +91,7 @@ let input_cmi ic =
   let flags = (input_value ic : flags) in
   {
     cmi_name = name;
-    cmi_sign = Deserialize.deserialize data sign;
+    cmi_sign = deserialize data sign;
     cmi_crcs = crcs;
     cmi_flags = flags;
   }
@@ -146,7 +136,7 @@ let output_cmi filename oc cmi =
   let len_pos = Out_channel.pos oc in
   output_int64 oc Int64.zero;
   let data_pos = Int64.to_int len_pos + 8 in
-  let sign = Serialize.serialize oc data_pos cmi.cmi_sign in
+  let sign = serialize oc data_pos cmi.cmi_sign in
   let val_pos = Out_channel.pos oc in
   Out_channel.seek oc len_pos;
   let len = Int64.sub val_pos (Int64.of_int data_pos) in
