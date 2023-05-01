@@ -1868,6 +1868,11 @@ module_type:
         { Pmty_extension $1 }
     )
     { $1 }
+  | module_type WITH mkrhs(mod_longident)
+    { Jane_syntax.Strengthen.mty_of ~loc:(make_loc $loc($1)) ~attrs:[]
+        { Jane_syntax.Strengthen.mty = $1;
+          mod_id = $3
+        } }
 ;
 (* A signature, which appears between SIG and END (among other places),
    is a list of signature elements. *)
