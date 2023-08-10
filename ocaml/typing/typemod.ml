@@ -640,9 +640,14 @@ let merge_constraint initial_env loc sg lid constr =
           id row_id newdecl sig_decl;
         begin match constr with
           With_type _ ->
+            let modc =
+              match sig_decl.type_params, sig_decl.type_kind with
+              | [], Type_abstract -> Some ([s], Modc_type newdecl)
+              | _ -> None
+            in
             return ~ghosts
               ~replace_by:(Some(Sig_type(id, newdecl, rs, priv)))
-              ((Pident id, lid, Twith_type tdecl), None)
+              ((Pident id, lid, Twith_type tdecl), modc)
         | (* With_typesubst *) _ ->
             real_ids := [Pident id];
             return ~ghosts ~replace_by:None
@@ -2037,6 +2042,7 @@ let rec nongen_modtype env f = function
          Do we need to return a module_type option here which expands as much
          as necessary to get rid of non-gen tyvars? *)
         | Modc_module mty -> nongen_modtype env f mty
+        | Modc_type _ -> false
       in
       nongen_modtype env f mty || nongen_constraint mc
 
@@ -3107,6 +3113,7 @@ let rec normalize_modtype = function
   | Mty_with (mty,_,mc) ->
       let normalize_module_constraint = function
        | Modc_module mty -> normalize_modtype mty
+       | Modc_type _ -> ()
       in
       normalize_modtype mty ;
       normalize_module_constraint mc

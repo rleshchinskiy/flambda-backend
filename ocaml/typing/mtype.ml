@@ -138,7 +138,7 @@ let rec reduce_with ns mc mty =
   match mty with
   | Mty_signature sg ->
       let sg = Subst.Lazy.force_signature_once sg
-        |> List.map (apply_with_to_sig_item ns mc)
+        |> List.filter_map (apply_with_to_sig_item ns mc)
         |> of_value
       in
       Some (Mty_signature sg)
@@ -151,22 +151,28 @@ and apply_with_to_sig_item ns mc item =
   let name = Ident.name (Subst.Lazy.signature_item_id item) in
   match ns, item with
   | [s], _ when name = s ->
-      begin match mc, item with
-      | Modc_module mty, Sig_module(id, pres, md, rs, vis) ->
-          let md_type = match md.md_type with
-            | Mty_alias _ -> md.md_type
-            | _ -> mty
-          in
-          let md = {md with md_type} in
-          Sig_module (id, pres, md, rs, vis)
+      let item = match mc, item with
+        | Modc_module mty, Sig_module(id, pres, md, rs, vis) ->
+            let md_type = match md.md_type with
+              | Mty_alias _ -> md.md_type
+              | _ -> mty
+            in
+            let md = {md with md_type} in
+            Sig_module (id, pres, md, rs, vis)
 
-      | _, sigelt -> sigelt
-      end
+        | Modc_type td, Sig_type(id, _, rs, vis) ->
+            Sig_type (id, td, rs, vis)
+
+        | _, sigelt -> sigelt
+      in
+      Some item
+  | [s], Sig_type(_, {type_kind = Type_abstract}, _, _) when name = s^"#row" ->
+      None
   | s :: ns, Sig_module(id, pres, md, rs, vis) when name = s ->
       let md = { md with md_type = apply_with_lazy ns mc md.md_type }
       in
-      Sig_module(id, pres, md, rs, vis)
-  | _ -> item
+      Some (Sig_module(id, pres, md, rs, vis))
+  | _ -> Some item
 
 and apply_with_lazy ns mc mty =
   match reduce_with ns mc mty with
@@ -289,6 +295,7 @@ let rec expand_paths_lazy paths env =
         let base = expand_paths_lazy paths env base in
         let mc = match mc with
         | Modc_module mty -> Modc_module (expand_paths_lazy paths env mty)
+        | Modc_type _ -> mc
         in
         Mty_with (base,ns,mc)
       end
@@ -400,6 +407,7 @@ let rec make_aliases_absent ?(aliased=false) pres mty =
       let mc = match mc with
         | Modc_module mty ->
             let _, mty = make_aliases_absent pres mty in Modc_module mty
+        | Modc_type _ -> mc
       in
       let pres, mty = make_aliases_absent pres mty in
       pres, Mty_with (mty, ns, mc)

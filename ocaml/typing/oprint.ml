@@ -669,7 +669,11 @@ and print_out_module_with ppf =
     fprintf ppf "module %s : %a"
       (dotted ns)
       print_out_module_type mty
-        
+  | ns, Omodc_type td ->
+    print_out_type_decl
+      "type"
+      ppf
+      { td with otype_name = dotted ns }
 and print_out_signature ppf =
   function
     [] -> ()

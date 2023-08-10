@@ -309,6 +309,12 @@ let equal_modtype_paths env p1 subst p2 =
        (Env.normalize_modtype_path env
           (Subst.modtype_path subst p2))
 
+let equal_type_paths env p1 subst p2 =
+  Path.same p1 p2
+  || Path.same (Env.normalize_type_path None env p1)
+       (Env.normalize_type_path None env
+          (Subst.type_path subst p2))
+
 let simplify_structure_coercion cc id_pos_list =
   let rec is_identity_coercion pos = function
   | [] ->
@@ -500,6 +506,25 @@ and shallow_constraint ~in_eq env subst c1 c2 =
   match c1, c2 with
   | Modc_module mty1, Modc_module mty2 ->
       shallow_modtypes ~in_eq ~incl:in_eq env subst mty1 mty2
+  | Modc_type td1, Modc_type td2 ->
+      begin match td1.type_manifest, td2.type_manifest with
+      | None, None -> true (* RL FIXME: should never happen? *)
+      | Some _, None -> in_eq (* RL FIXME: should never happen? *)
+      | Some t1, Some t2 ->
+          let rec same_desc r1 r2 = match r1, r2 with
+            | Tvar {name=n1;layout=l1}, Tvar {name=n2;layout=l2} ->
+                Option.equal String.equal n1 n2
+                && Layouts.Layout.equal l1 l2
+            | Ttuple ts1, Ttuple ts2 -> List.equal same_type ts1 ts2
+            | Tconstr (p1,ts1,_), Tconstr (p2,ts2,_) ->
+                equal_type_paths env p1 subst p2 && List.equal same_type ts1 ts2
+            | _ -> false
+          and same_type t1 t2 = same_desc (get_desc t1) (get_desc t2)
+          in
+          same_type t1 t2
+      | _ -> false
+      end
+  | _ -> false
 
 (**
    In the group of mutual functions below, the [~in_eq] argument is [true] when

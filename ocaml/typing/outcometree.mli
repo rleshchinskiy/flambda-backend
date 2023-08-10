@@ -132,6 +132,7 @@ type out_module_type =
   | Omty_with of out_module_type * out_module_with list
 and out_module_constraint =
   | Omodc_module of out_module_type
+  | Omodc_type of out_type_decl
 and out_module_with = string list * out_module_constraint
 and out_sig_item =
   | Osig_class of

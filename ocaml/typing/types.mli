@@ -674,6 +674,7 @@ module type Wrapped = sig
 
   and module_constraint =
   | Modc_module of module_type
+  | Modc_type of type_declaration
 
   and functor_parameter =
   | Unit

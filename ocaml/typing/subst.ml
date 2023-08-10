@@ -772,6 +772,7 @@ and subst_lazy_modtype scoping s = function
       let mty = subst_lazy_modtype scoping s mty in
       let c = match c with
         | Modc_module mty -> Modc_module (subst_lazy_modtype scoping s mty)
+        | Modc_type td -> Modc_type (type_declaration s td)
       in
       Mty_with (mty, p, c)
 

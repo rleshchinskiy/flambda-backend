@@ -367,6 +367,7 @@ module type Wrapped_types = sig
 
   and module_constraint =
   | Modc_module of module_type
+  | Modc_type of type_declaration
 
   and functor_parameter =
   | Unit
@@ -446,6 +447,7 @@ module Map_wrapped(From : Wrapped)(To : Wrapped) = struct
 
   and module_constraint m = function
     | Modc_module mty -> To.Modc_module (module_type m mty)
+    | Modc_type ty -> To.Modc_type ty
 
   and functor_parameter m = function
       | Unit -> To.Unit
