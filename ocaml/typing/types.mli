@@ -670,6 +670,10 @@ module type Wrapped = sig
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
   | Mty_strengthen of module_type * Path.t * bool
+  | Mty_with of module_type * string list * module_constraint
+
+  and module_constraint =
+  | Modc_module of module_type
 
   and functor_parameter =
   | Unit
@@ -702,6 +706,8 @@ module type Wrapped = sig
     mtd_loc: Location.t;
     mtd_uid: Uid.t;
   }
+
+  val signature_item_id : signature_item -> Ident.t
 end
 
 module Make_wrapped(Wrap : Wrap) : Wrapped with type 'a wrapped = 'a Wrap.t
@@ -724,6 +730,8 @@ module Map_wrapped(From : Wrapped)(To : Wrapped) : sig
   val signature_item : mapper -> From.signature_item -> To.signature_item
   val functor_parameter :
     mapper -> From.functor_parameter -> To.functor_parameter
+  val module_constraint :
+    mapper -> From.module_constraint -> To.module_constraint
 end
 
 include Wrapped with type 'a wrapped = 'a

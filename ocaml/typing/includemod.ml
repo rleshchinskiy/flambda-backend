@@ -396,7 +396,8 @@ let retrieve_functor_params env mty =
     match Mtype.scrape_alias env mty with
     | Mty_functor (p, res) ->
         retrieve_functor_params (p :: before) env res
-    | Mty_ident _ | Mty_alias _ | Mty_signature _ | Mty_strengthen _ as res ->
+    | Mty_ident _ | Mty_alias _ | Mty_signature _ | Mty_strengthen _
+    | Mty_with _ as res ->
         List.rev before, res
   in
   retrieve_functor_params [] env mty
@@ -447,7 +448,7 @@ module Sign_diff = struct
 end
 
 (* Quickly compare module types without expanding them *)
-let rec shallow_modtypes env subst mty1 mty2 =
+let rec shallow_modtypes ~in_eq ~incl env subst mty1 mty2 =
   let open Subst.Lazy in
   match mty1, mty2 with
   | Mty_alias p1, Mty_alias p2 ->
@@ -455,23 +456,50 @@ let rec shallow_modtypes env subst mty1 mty2 =
   | Mty_ident p1, Mty_ident p2 ->
       equal_modtype_paths env p1 subst p2
   | Mty_strengthen (mty1,p1,_), Mty_strengthen (mty2,p2,_)
-        when shallow_modtypes env subst mty1 mty2
-          && shallow_module_paths env subst p1 mty2 p2 ->
+        when shallow_modtypes ~in_eq ~incl env subst mty1 mty2
+          && shallow_module_paths ~in_eq ~incl env subst p1 mty2 p2 ->
       true
-  | Mty_strengthen (mty1,_,_), mty2 ->
+  | Mty_strengthen (mty1,_,_), mty2 when incl ->
       (* S with M <= S *)
-      shallow_modtypes env subst mty1 mty2
+      shallow_modtypes ~in_eq ~incl env subst mty1 mty2
+  | Mty_with _, mty2 ->
+      let rec constraints cs = function
+        | Mty_with (mty, ns, mc) -> constraints ((ns,mc) :: cs) mty
+        | mty -> mty, cs
+      in
+      let mty1, cs1 = constraints [] mty1 in
+      let mty2, cs2 = constraints [] mty2 in
+      shallow_modtypes ~in_eq ~incl env subst mty1 mty2
+      && shallow_constraints ~in_eq ~incl env subst cs1 cs2
   | _ -> false
 
-and shallow_module_paths env subst p1 mty2 p2 =
+and shallow_module_paths ~in_eq ~incl env subst p1 mty2 p2 =
   equal_module_paths env p1 subst p2 ||
   (* This shortcut is a significant win in some cases. Note we don't apply it
      recursively as doing seems to be a net loss. *)
-  match (Env.find_module_lazy p1 env).md_type with
+  (incl && match (Env.find_module_lazy p1 env).md_type with
     | Mty_strengthen (mty1,p1,_) ->
-        shallow_modtypes env subst mty1 mty2
+        shallow_modtypes ~in_eq ~incl env subst mty1 mty2
           && equal_module_paths env p1 subst p2
-    | _ | exception Not_found -> false
+    | _ | exception Not_found -> false)
+
+and shallow_constraints ~in_eq ~incl env subst cs1 cs2 =
+  match cs1, cs2 with
+  | [], [] -> true
+  | _, [] when incl ->
+      (* S with C <= S *)
+      true
+  | (ns1,c1)::cs1, (ns2,c2)::cs2 ->
+    List.equal String.equal ns1 ns2
+    && shallow_constraint ~in_eq env subst c1 c2
+    && shallow_constraints ~in_eq ~incl env subst cs1 cs2
+  | _ -> false
+
+and shallow_constraint ~in_eq env subst c1 c2 =
+  let open Subst.Lazy in
+  match c1, c2 with
+  | Modc_module mty1, Modc_module mty2 ->
+      shallow_modtypes ~in_eq ~incl:in_eq env subst mty1 mty2
 
 (**
    In the group of mutual functions below, the [~in_eq] argument is [true] when
@@ -508,7 +536,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
     | _ -> false
   in
   match mty1, mty2 with
-  | _ when shallow_modtypes env subst mty1 mty2 ->
+  | _ when shallow_modtypes ~in_eq ~incl:true env subst mty1 mty2 ->
     Ok (Tcoerce_none, orig_shape)
 
   | (Mty_alias p1, _) when not (is_alias mty2) -> begin
@@ -635,7 +663,7 @@ and try_modtypes ~in_eq ~loc env ~mark subst mty1 mty2 orig_shape =
             in
             let d = Error.sdiff params1 params2 in
             Error Error.(Functor (Params d))
-        | _, (Mty_ident _ | Mty_strengthen _) ->
+        | _, (Mty_ident _ | Mty_strengthen _ | Mty_with _) ->
             Error Error.(Mt_core Not_an_identifier)
         | _, Mty_alias _ ->
             Error (Error.Mt_core Error.Not_an_alias)
@@ -1089,7 +1117,7 @@ module Functor_inclusion_diff = struct
 
   let rec keep_expansible_param = function
     | Mty_ident _ | Mty_alias _ as mty -> Some mty
-    | Mty_signature _ | Mty_functor _ -> None
+    | Mty_signature _ | Mty_functor _ | Mty_with _ -> None (* RL FIXME *)
     | Mty_strengthen (mty,_,_) -> keep_expansible_param mty
 
   let lookup_expansion { env ; res ; _ } = match res with
